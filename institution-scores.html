@@ -276,6 +276,167 @@
             text-decoration: underline;
         }
 
+        /* Expandable score cell */
+        .score-cell {
+            position: relative;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .score-cell:hover {
+            background: #e0e7ff;
+            border-radius: 8px;
+        }
+
+        .score-cell .score-main {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .score-cell .score-avg {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .score-cell .expand-icon {
+            font-size: 0.7rem;
+            color: var(--primary-color);
+            margin-top: 2px;
+        }
+
+        /* Score detail popup */
+        .score-detail {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 12px;
+            min-width: 200px;
+            max-width: 280px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+            z-index: 100;
+            text-align: left;
+            font-size: 0.85rem;
+        }
+
+        .score-detail.show {
+            display: block;
+        }
+
+        .score-detail-header {
+            font-weight: 600;
+            color: var(--primary-color);
+            padding-bottom: 8px;
+            margin-bottom: 8px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .rater-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .rater-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            border-bottom: 1px dashed #e2e8f0;
+        }
+
+        .rater-item:last-child {
+            border-bottom: none;
+        }
+
+        .rater-name {
+            color: var(--text-primary);
+        }
+
+        .rater-score {
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+
+        .score-summary {
+            margin-top: 10px;
+            padding-top: 8px;
+            border-top: 1px solid var(--border-color);
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .score-summary strong {
+            color: var(--text-primary);
+        }
+
+        /* Row expansion */
+        .detail-row {
+            display: none;
+            background: #f8fafc;
+        }
+
+        .detail-row.show {
+            display: table-row;
+        }
+
+        .detail-row td {
+            padding: 16px;
+            text-align: left;
+        }
+
+        .detail-content {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+
+        .category-detail {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            border: 1px solid var(--border-color);
+        }
+
+        .category-detail h4 {
+            color: var(--primary-color);
+            margin-bottom: 12px;
+            font-size: 0.95rem;
+        }
+
+        .category-detail .rater-item {
+            padding: 6px 0;
+        }
+
+        .expand-row-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .expand-row-btn:hover {
+            background: #e2e8f0;
+            color: var(--primary-color);
+        }
+
+        .expand-row-btn.expanded {
+            color: var(--primary-color);
+            background: #e0e7ff;
+        }
+
+        @media (max-width: 768px) {
+            .detail-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
         .rounding-note {
             background: #fffbeb;
             border: 1px solid #fbbf24;
@@ -747,6 +908,7 @@
                         <table class="score-table">
                             <thead>
                                 <tr>
+                                    <th style="width: 40px;"></th>
                                     <th style="width: 50px;">排名</th>
                                     <th style="text-align: left;">姓名</th>
                                     <th>評分人數</th>
@@ -761,14 +923,23 @@
                 `;
 
                 employees.forEach((emp, idx) => {
+                    const rowId = `row-${org.replace(/\s/g, '')}-${idx}`;
                     const cat1Avg = emp.cat1_avg ? emp.cat1_avg.toFixed(2) : '0.00';
                     const cat2Avg = emp.cat2_avg ? emp.cat2_avg.toFixed(2) : '0.00';
                     const cat3Avg = emp.cat3_avg ? emp.cat3_avg.toFixed(2) : '0.00';
 
                     const formula = `${cat1Avg}→${emp.cat1_rounded} + ${cat2Avg}→${emp.cat2_rounded} + ${cat3Avg}→${emp.cat3_rounded} = ${emp.average_score}`;
 
+                    // Build rater details for each category
+                    const raters = emp.raters || [];
+
                     html += `
-                        <tr>
+                        <tr class="main-row" data-row-id="${rowId}">
+                            <td>
+                                <button class="expand-row-btn" onclick="toggleDetailRow('${rowId}')" title="展開詳細評分">
+                                    ▶
+                                </button>
+                            </td>
                             <td>${idx + 1}</td>
                             <td class="name-col">${emp.name}</td>
                             <td>${emp.rater_count || 0}</td>
@@ -787,6 +958,93 @@
                             <td class="total-score">${emp.average_score}</td>
                             <td class="formula-col">${formula}</td>
                         </tr>
+                        <tr class="detail-row" id="${rowId}">
+                            <td colspan="9">
+                                <div class="detail-content">
+                                    <div class="category-detail">
+                                        <h4>📊 第一大類評分明細 (平均 ${cat1Avg})</h4>
+                                        <div class="rater-list">
+                    `;
+
+                    // Cat1 raters
+                    if (raters.length > 0) {
+                        raters.forEach(r => {
+                            html += `
+                                <div class="rater-item">
+                                    <span class="rater-name">${r.name}</span>
+                                    <span class="rater-score">${r.cat1}</span>
+                                </div>
+                            `;
+                        });
+                        html += `
+                            <div class="score-summary">
+                                <strong>計算：</strong>(${raters.map(r => r.cat1).join(' + ')}) ÷ ${raters.length} = ${cat1Avg} → ${emp.cat1_rounded}
+                            </div>
+                        `;
+                    } else {
+                        html += `<div style="color: var(--text-secondary);">無評分資料</div>`;
+                    }
+
+                    html += `
+                                        </div>
+                                    </div>
+                                    <div class="category-detail">
+                                        <h4>📊 第二大類評分明細 (平均 ${cat2Avg})</h4>
+                                        <div class="rater-list">
+                    `;
+
+                    // Cat2 raters
+                    if (raters.length > 0) {
+                        raters.forEach(r => {
+                            html += `
+                                <div class="rater-item">
+                                    <span class="rater-name">${r.name}</span>
+                                    <span class="rater-score">${r.cat2}</span>
+                                </div>
+                            `;
+                        });
+                        html += `
+                            <div class="score-summary">
+                                <strong>計算：</strong>(${raters.map(r => r.cat2).join(' + ')}) ÷ ${raters.length} = ${cat2Avg} → ${emp.cat2_rounded}
+                            </div>
+                        `;
+                    } else {
+                        html += `<div style="color: var(--text-secondary);">無評分資料</div>`;
+                    }
+
+                    html += `
+                                        </div>
+                                    </div>
+                                    <div class="category-detail">
+                                        <h4>📊 第三大類評分明細 (平均 ${cat3Avg})</h4>
+                                        <div class="rater-list">
+                    `;
+
+                    // Cat3 raters
+                    if (raters.length > 0) {
+                        raters.forEach(r => {
+                            html += `
+                                <div class="rater-item">
+                                    <span class="rater-name">${r.name}</span>
+                                    <span class="rater-score">${r.cat3}</span>
+                                </div>
+                            `;
+                        });
+                        html += `
+                            <div class="score-summary">
+                                <strong>計算：</strong>(${raters.map(r => r.cat3).join(' + ')}) ÷ ${raters.length} = ${cat3Avg} → ${emp.cat3_rounded}
+                            </div>
+                        `;
+                    } else {
+                        html += `<div style="color: var(--text-secondary);">無評分資料</div>`;
+                    }
+
+                    html += `
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
                     `;
                 });
 
@@ -798,6 +1056,22 @@
             });
 
             container.innerHTML = html;
+        }
+
+        // Toggle detail row
+        function toggleDetailRow(rowId) {
+            const detailRow = document.getElementById(rowId);
+            const btn = document.querySelector(`[data-row-id="${rowId}"] .expand-row-btn`);
+
+            if (detailRow.classList.contains('show')) {
+                detailRow.classList.remove('show');
+                btn.classList.remove('expanded');
+                btn.textContent = '▶';
+            } else {
+                detailRow.classList.add('show');
+                btn.classList.add('expanded');
+                btn.textContent = '▼';
+            }
         }
 
         // Initialize
