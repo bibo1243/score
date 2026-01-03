@@ -726,9 +726,36 @@
         }
 
         async function processLocalData(rawScores) {
-            // Simple processing for display
-            const employees = {};
+            // Load staff meta first
+            const staffMeta = await loadStaffMeta();
 
+            // Define managers
+            const MANAGERS = new Set(['廖振杉', '廖慧雯', '李冠葦', '陳淑錡', '楊顗帆', '高靜華', '陳宛妤', '鍾宜珮']);
+            const SUPERVISORS = new Set(['簡采琦', '林品亨', '林紀騰']);
+            const ALL_MANAGERS = new Set([...MANAGERS, ...SUPERVISORS]);
+
+            // Supervisor sections mapping
+            const SUPERVISOR_SECTIONS = {
+                '簡采琦': '社工股',
+                '林品亨': '生輔股',
+                '林紀騰': '庶務股'
+            };
+
+            // Check if rater is a manager for specific employee
+            function isManagerForEmployee(raterName, employeeSection) {
+                if (MANAGERS.has(raterName)) return true;
+                if (SUPERVISORS.has(raterName)) {
+                    const supervisorSection = SUPERVISOR_SECTIONS[raterName] || '';
+                    if (['保育股', '保育/生輔股', '生輔股'].includes(supervisorSection)) {
+                        return ['保育股', '保育/生輔股', '生輔股'].includes(employeeSection);
+                    }
+                    return supervisorSection === employeeSection;
+                }
+                return false;
+            }
+
+            // Collect all ratings per employee
+            const employees = {};
             rawScores.forEach(row => {
                 const ratee = row.ratee;
                 if (!ratee) return;
@@ -736,10 +763,7 @@
                 if (!employees[ratee]) {
                     employees[ratee] = {
                         name: ratee,
-                        raters: [],
-                        cat1s: [],
-                        cat2s: [],
-                        cat3s: []
+                        raters: []
                     };
                 }
 
@@ -749,31 +773,77 @@
                     cat2: parseFloat(row.cat2) || 0,
                     cat3: parseFloat(row.cat3) || 0
                 });
-                employees[ratee].cat1s.push(parseFloat(row.cat1) || 0);
-                employees[ratee].cat2s.push(parseFloat(row.cat2) || 0);
-                employees[ratee].cat3s.push(parseFloat(row.cat3) || 0);
             });
 
-            // Load staff meta
-            const staffMeta = await loadStaffMeta();
-
-            // Calculate averages
+            // Calculate weighted averages
             const result = [];
             for (const [name, data] of Object.entries(employees)) {
-                const cat1Avg = data.cat1s.reduce((a, b) => a + b, 0) / data.cat1s.length;
-                const cat2Avg = data.cat2s.reduce((a, b) => a + b, 0) / data.cat2s.length;
-                const cat3Avg = data.cat3s.reduce((a, b) => a + b, 0) / data.cat3s.length;
+                const meta = staffMeta[name] || { org: '未分類', unit: '', section: '' };
+                const employeeSection = meta.section || '';
+                const raters = data.raters;
+
+                // Separate raters into managers and colleagues
+                const managerRaters = [];
+                const colleagueRaters = [];
+
+                raters.forEach(r => {
+                    if (isManagerForEmployee(r.name, employeeSection)) {
+                        managerRaters.push(r);
+                    } else {
+                        colleagueRaters.push(r);
+                    }
+                });
+
+                // Calculate weighted averages for each category
+                function calcWeightedCatAvg(catKey) {
+                    let managerAvg = 0;
+                    let colleagueAvg = 0;
+                    let managerWeight = 0;
+                    let colleagueWeight = 0;
+
+                    if (managerRaters.length > 0) {
+                        const sum = managerRaters.reduce((s, r) => s + r[catKey], 0);
+                        managerAvg = sum / managerRaters.length;
+                        managerWeight = 0.5;
+                    }
+
+                    if (colleagueRaters.length > 0) {
+                        const sum = colleagueRaters.reduce((s, r) => s + r[catKey], 0);
+                        colleagueAvg = sum / colleagueRaters.length;
+                        colleagueWeight = 0.5;
+                    }
+
+                    // If only one group exists, use 100% from that group
+                    const totalWeight = managerWeight + colleagueWeight;
+                    if (totalWeight === 0) return 0;
+
+                    if (totalWeight < 1.0) {
+                        // Normalize weights if only one group exists
+                        return (managerAvg * managerWeight + colleagueAvg * colleagueWeight) / totalWeight;
+                    }
+
+                    return managerAvg * 0.5 + colleagueAvg * 0.5;
+                }
+
+                const cat1Avg = calcWeightedCatAvg('cat1');
+                const cat2Avg = calcWeightedCatAvg('cat2');
+                const cat3Avg = calcWeightedCatAvg('cat3');
 
                 const cat1Rounded = customRound(cat1Avg);
                 const cat2Rounded = customRound(cat2Avg);
                 const cat3Rounded = customRound(cat3Avg);
 
-                const meta = staffMeta[name] || { org: '未分類', unit: '', section: '' };
+                // Add weighted info to raters for display
+                const ratersWithRole = raters.map(r => ({
+                    ...r,
+                    isManager: isManagerForEmployee(r.name, employeeSection)
+                }));
 
                 result.push({
                     name: name,
                     org: meta.org || '未分類',
                     unit: meta.unit || '',
+                    section: meta.section || '',
                     cat1_avg: cat1Avg,
                     cat2_avg: cat2Avg,
                     cat3_avg: cat3Avg,
@@ -781,8 +851,10 @@
                     cat2_rounded: cat2Rounded,
                     cat3_rounded: cat3Rounded,
                     average_score: cat1Rounded + cat2Rounded + cat3Rounded,
-                    rater_count: data.raters.length,
-                    raters: data.raters
+                    rater_count: raters.length,
+                    raters: ratersWithRole,
+                    managerRaters: managerRaters,
+                    colleagueRaters: colleagueRaters
                 });
             }
 
@@ -961,87 +1033,98 @@
                         <tr class="detail-row" id="${rowId}">
                             <td colspan="9">
                                 <div class="detail-content">
-                                    <div class="category-detail">
-                                        <h4>📊 第一大類評分明細 (平均 ${cat1Avg})</h4>
-                                        <div class="rater-list">
                     `;
 
-                    // Cat1 raters
-                    if (raters.length > 0) {
-                        raters.forEach(r => {
-                            html += `
-                                <div class="rater-item">
-                                    <span class="rater-name">${r.name}</span>
-                                    <span class="rater-score">${r.cat1}</span>
-                                </div>
-                            `;
-                        });
-                        html += `
-                            <div class="score-summary">
-                                <strong>計算：</strong>(${raters.map(r => r.cat1).join(' + ')}) ÷ ${raters.length} = ${cat1Avg} → ${emp.cat1_rounded}
-                            </div>
+                    // Helper to generate category detail with weighted breakdown
+                    function renderCategoryDetail(catKey, catLabel, catAvg, catRounded) {
+                        const managerRaters = emp.managerRaters || [];
+                        const colleagueRaters = emp.colleagueRaters || [];
+
+                        // Calculate averages for each group
+                        const managerSum = managerRaters.reduce((s, r) => s + r[catKey], 0);
+                        const managerAvg = managerRaters.length > 0 ? (managerSum / managerRaters.length).toFixed(2) : '-';
+
+                        const colleagueSum = colleagueRaters.reduce((s, r) => s + r[catKey], 0);
+                        const colleagueAvg = colleagueRaters.length > 0 ? (colleagueSum / colleagueRaters.length).toFixed(2) : '-';
+
+                        let detailHtml = `
+                            <div class="category-detail">
+                                <h4>📊 ${catLabel} (加權平均 ${catAvg})</h4>
                         `;
-                    } else {
-                        html += `<div style="color: var(--text-secondary);">無評分資料</div>`;
+
+                        // Manager group (50%)
+                        detailHtml += `
+                            <div style="margin-bottom: 12px;">
+                                <div style="background: #dbeafe; padding: 6px 10px; border-radius: 6px; font-weight: 600; color: #1e40af; margin-bottom: 6px;">
+                                    👔 主管評分 (50%) - 平均: ${managerAvg}
+                                </div>
+                                <div class="rater-list">
+                        `;
+
+                        if (managerRaters.length > 0) {
+                            managerRaters.forEach(r => {
+                                detailHtml += `
+                                    <div class="rater-item">
+                                        <span class="rater-name">${r.name}</span>
+                                        <span class="rater-score">${r[catKey]}</span>
+                                    </div>
+                                `;
+                            });
+                        } else {
+                            detailHtml += `<div style="color: var(--text-secondary); font-size: 0.85rem;">無主管評分</div>`;
+                        }
+
+                        detailHtml += `</div></div>`;
+
+                        // Colleague group (50%)
+                        detailHtml += `
+                            <div style="margin-bottom: 12px;">
+                                <div style="background: #dcfce7; padding: 6px 10px; border-radius: 6px; font-weight: 600; color: #166534; margin-bottom: 6px;">
+                                    👥 同仁評分 (50%) - 平均: ${colleagueAvg}
+                                </div>
+                                <div class="rater-list">
+                        `;
+
+                        if (colleagueRaters.length > 0) {
+                            colleagueRaters.forEach(r => {
+                                detailHtml += `
+                                    <div class="rater-item">
+                                        <span class="rater-name">${r.name}</span>
+                                        <span class="rater-score">${r[catKey]}</span>
+                                    </div>
+                                `;
+                            });
+                        } else {
+                            detailHtml += `<div style="color: var(--text-secondary); font-size: 0.85rem;">無同仁評分</div>`;
+                        }
+
+                        detailHtml += `</div></div>`;
+
+                        // Calculation summary
+                        let calcFormula = '';
+                        if (managerRaters.length > 0 && colleagueRaters.length > 0) {
+                            calcFormula = `(${managerAvg} × 50%) + (${colleagueAvg} × 50%) = ${catAvg} → ${catRounded}`;
+                        } else if (managerRaters.length > 0) {
+                            calcFormula = `主管平均 ${managerAvg} → ${catRounded}`;
+                        } else if (colleagueRaters.length > 0) {
+                            calcFormula = `同仁平均 ${colleagueAvg} → ${catRounded}`;
+                        }
+
+                        detailHtml += `
+                            <div class="score-summary">
+                                <strong>加權計算：</strong>${calcFormula}
+                            </div>
+                        </div>
+                        `;
+
+                        return detailHtml;
                     }
 
-                    html += `
-                                        </div>
-                                    </div>
-                                    <div class="category-detail">
-                                        <h4>📊 第二大類評分明細 (平均 ${cat2Avg})</h4>
-                                        <div class="rater-list">
-                    `;
-
-                    // Cat2 raters
-                    if (raters.length > 0) {
-                        raters.forEach(r => {
-                            html += `
-                                <div class="rater-item">
-                                    <span class="rater-name">${r.name}</span>
-                                    <span class="rater-score">${r.cat2}</span>
-                                </div>
-                            `;
-                        });
-                        html += `
-                            <div class="score-summary">
-                                <strong>計算：</strong>(${raters.map(r => r.cat2).join(' + ')}) ÷ ${raters.length} = ${cat2Avg} → ${emp.cat2_rounded}
-                            </div>
-                        `;
-                    } else {
-                        html += `<div style="color: var(--text-secondary);">無評分資料</div>`;
-                    }
+                    html += renderCategoryDetail('cat1', '第一大類評分明細', cat1Avg, emp.cat1_rounded);
+                    html += renderCategoryDetail('cat2', '第二大類評分明細', cat2Avg, emp.cat2_rounded);
+                    html += renderCategoryDetail('cat3', '第三大類評分明細', cat3Avg, emp.cat3_rounded);
 
                     html += `
-                                        </div>
-                                    </div>
-                                    <div class="category-detail">
-                                        <h4>📊 第三大類評分明細 (平均 ${cat3Avg})</h4>
-                                        <div class="rater-list">
-                    `;
-
-                    // Cat3 raters
-                    if (raters.length > 0) {
-                        raters.forEach(r => {
-                            html += `
-                                <div class="rater-item">
-                                    <span class="rater-name">${r.name}</span>
-                                    <span class="rater-score">${r.cat3}</span>
-                                </div>
-                            `;
-                        });
-                        html += `
-                            <div class="score-summary">
-                                <strong>計算：</strong>(${raters.map(r => r.cat3).join(' + ')}) ÷ ${raters.length} = ${cat3Avg} → ${emp.cat3_rounded}
-                            </div>
-                        `;
-                    } else {
-                        html += `<div style="color: var(--text-secondary);">無評分資料</div>`;
-                    }
-
-                    html += `
-                                        </div>
-                                    </div>
                                 </div>
                             </td>
                         </tr>
