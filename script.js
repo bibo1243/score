@@ -537,6 +537,7 @@ async function updateScore(inputEl) {
 }
 
 // Immediately update employee card summary scores based on current rater inputs
+// Uses weighted calculation: 50% managers + 50% colleagues
 function updateEmployeeCardSummary(ratee) {
     // Find the employee card
     const employeeCards = document.querySelectorAll('.employee-card');
@@ -550,10 +551,13 @@ function updateEmployeeCardSummary(ratee) {
 
     if (!targetCard) return;
 
-    // Collect all rater scores for this employee
+    // Collect all rater scores for this employee, separated by manager/colleague
     const raterCards = targetCard.querySelectorAll('.rater-card');
-    let cat1Sum = 0, cat2Sum = 0, cat3Sum = 0;
-    let raterCount = 0;
+
+    // Managers (has special-rater class)
+    let mgrCat1Sum = 0, mgrCat2Sum = 0, mgrCat3Sum = 0, mgrCount = 0;
+    // Colleagues (no special-rater class)
+    let colCat1Sum = 0, colCat2Sum = 0, colCat3Sum = 0, colCount = 0;
 
     raterCards.forEach(raterCard => {
         const cat1Input = raterCard.querySelector('input[data-field="cat1"]');
@@ -561,47 +565,96 @@ function updateEmployeeCardSummary(ratee) {
         const cat3Input = raterCard.querySelector('input[data-field="cat3"]');
 
         if (cat1Input && cat2Input && cat3Input) {
-            cat1Sum += parseFloat(cat1Input.value) || 0;
-            cat2Sum += parseFloat(cat2Input.value) || 0;
-            cat3Sum += parseFloat(cat3Input.value) || 0;
-            raterCount++;
+            const cat1 = parseFloat(cat1Input.value) || 0;
+            const cat2 = parseFloat(cat2Input.value) || 0;
+            const cat3 = parseFloat(cat3Input.value) || 0;
+
+            // Check if this rater is a manager (has special-rater class)
+            if (raterCard.classList.contains('special-rater')) {
+                mgrCat1Sum += cat1;
+                mgrCat2Sum += cat2;
+                mgrCat3Sum += cat3;
+                mgrCount++;
+            } else {
+                colCat1Sum += cat1;
+                colCat2Sum += cat2;
+                colCat3Sum += cat3;
+                colCount++;
+            }
         }
     });
 
-    if (raterCount === 0) return;
+    if (mgrCount === 0 && colCount === 0) return;
 
-    // Calculate averages
-    const cat1Avg = cat1Sum / raterCount;
-    const cat2Avg = cat2Sum / raterCount;
-    const cat3Avg = cat3Sum / raterCount;
-    const totalAvg = cat1Avg + cat2Avg + cat3Avg;
-
-    // Update the summary display (Area 3 - category averages)
-    const catSummaries = targetCard.querySelectorAll('.category-summary');
-    catSummaries.forEach((summary, index) => {
-        const valueEl = summary.querySelector('.cat-value');
-        const originalEl = summary.querySelector('.cat-original');
-
-        if (index === 0 && valueEl) {
-            valueEl.textContent = Math.round(cat1Avg);
-            if (originalEl) originalEl.textContent = `(${cat1Avg.toFixed(2)})`;
-        } else if (index === 1 && valueEl) {
-            valueEl.textContent = Math.round(cat2Avg);
-            if (originalEl) originalEl.textContent = `(${cat2Avg.toFixed(2)})`;
-        } else if (index === 2 && valueEl) {
-            valueEl.textContent = Math.round(cat3Avg);
-            if (originalEl) originalEl.textContent = `(${cat3Avg.toFixed(2)})`;
+    // Custom rounding function: .1-.9 → ceil, .0 → floor
+    function customRound(value) {
+        const firstDecimal = Math.floor((value * 10) % 10);
+        if (firstDecimal >= 1) {
+            return Math.ceil(value);
+        } else {
+            return Math.floor(value);
         }
-    });
+    }
 
-    // Update the total score display (Area 4)
-    const scoreEl = targetCard.querySelector('.score-display');
-    if (scoreEl) {
-        scoreEl.textContent = totalAvg.toFixed(2);
+    // Calculate weighted averages for each category
+    function calcWeightedAvg(mgrSum, mgrCnt, colSum, colCnt) {
+        let mgrAvg = 0, colAvg = 0;
+        let mgrWeight = 0, colWeight = 0;
 
-        // Add flash animation
-        scoreEl.style.animation = 'pulse 0.3s ease';
-        setTimeout(() => scoreEl.style.animation = '', 300);
+        if (mgrCnt > 0) {
+            mgrAvg = mgrSum / mgrCnt;
+            mgrWeight = 0.5;
+        }
+        if (colCnt > 0) {
+            colAvg = colSum / colCnt;
+            colWeight = 0.5;
+        }
+
+        const totalWeight = mgrWeight + colWeight;
+        if (totalWeight === 0) return 0;
+
+        if (totalWeight < 1.0) {
+            // Only one group exists, normalize
+            return (mgrAvg * mgrWeight + colAvg * colWeight) / totalWeight;
+        }
+
+        return mgrAvg * 0.5 + colAvg * 0.5;
+    }
+
+    const cat1Avg = calcWeightedAvg(mgrCat1Sum, mgrCount, colCat1Sum, colCount);
+    const cat2Avg = calcWeightedAvg(mgrCat2Sum, mgrCount, colCat2Sum, colCount);
+    const cat3Avg = calcWeightedAvg(mgrCat3Sum, mgrCount, colCat3Sum, colCount);
+
+    const cat1Rounded = customRound(cat1Avg);
+    const cat2Rounded = customRound(cat2Avg);
+    const cat3Rounded = customRound(cat3Avg);
+    const totalScore = cat1Rounded + cat2Rounded + cat3Rounded;
+
+    // Update the category scores display
+    const catScores = targetCard.querySelectorAll('.cat-score');
+    if (catScores.length >= 3) {
+        const cat1Value = catScores[0].querySelector('.cat-value');
+        const cat1Raw = catScores[0].querySelector('.cat-original');
+        if (cat1Value) cat1Value.textContent = cat1Rounded;
+        if (cat1Raw) cat1Raw.textContent = `(${cat1Avg.toFixed(2)})`;
+
+        const cat2Value = catScores[1].querySelector('.cat-value');
+        const cat2Raw = catScores[1].querySelector('.cat-original');
+        if (cat2Value) cat2Value.textContent = cat2Rounded;
+        if (cat2Raw) cat2Raw.textContent = `(${cat2Avg.toFixed(2)})`;
+
+        const cat3Value = catScores[2].querySelector('.cat-value');
+        const cat3Raw = catScores[2].querySelector('.cat-original');
+        if (cat3Value) cat3Value.textContent = cat3Rounded;
+        if (cat3Raw) cat3Raw.textContent = `(${cat3Avg.toFixed(2)})`;
+    }
+
+    // Update the total score badge
+    const scoreBadge = targetCard.querySelector('.score-badge');
+    if (scoreBadge) {
+        scoreBadge.textContent = totalScore;
+        scoreBadge.style.animation = 'pulse 0.3s ease';
+        setTimeout(() => scoreBadge.style.animation = '', 300);
     }
 }
 
