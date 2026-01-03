@@ -741,8 +741,43 @@
                 '林紀騰': '庶務股'
             };
 
+            // Special employee rules - defines who counts as "manager" for specific employees
+            // Format: employeeName -> { managers: Set of manager names }
+            const SPECIAL_EMPLOYEE_MANAGERS = {
+                // 王姿斐 社資組，主管只有總幹事
+                '王姿斐': new Set(['李冠葦']),
+                // 高靜華 只被總幹事和兩家園主任評分
+                '高靜華': new Set(['李冠葦', '廖振杉', '廖慧雯']),
+            };
+
+            // Helper function to get unit managers
+            function getUnitManagers(unit) {
+                switch (unit) {
+                    case '社資組':
+                        return new Set(['李冠葦']);  // 只有總幹事
+                    case '行政組':
+                        return new Set(['李冠葦', '陳淑錡', '林紀騰']);
+                    case '教保組':
+                        return MANAGERS;
+                    default:
+                        return MANAGERS;
+                }
+            }
+
             // Check if rater is a manager for specific employee
-            function isManagerForEmployee(raterName, employeeSection) {
+            function isManagerForEmployee(raterName, employeeName, employeeSection, employeeUnit) {
+                // Check special rules first
+                if (SPECIAL_EMPLOYEE_MANAGERS[employeeName]) {
+                    return SPECIAL_EMPLOYEE_MANAGERS[employeeName].has(raterName);
+                }
+
+                // Check unit-specific managers
+                const unitManagers = getUnitManagers(employeeUnit);
+                if (unitManagers.has(raterName)) {
+                    return true;
+                }
+
+                // Default manager check
                 if (MANAGERS.has(raterName)) return true;
                 if (SUPERVISORS.has(raterName)) {
                     const supervisorSection = SUPERVISOR_SECTIONS[raterName] || '';
@@ -780,6 +815,7 @@
             for (const [name, data] of Object.entries(employees)) {
                 const meta = staffMeta[name] || { org: '未分類', unit: '', section: '' };
                 const employeeSection = meta.section || '';
+                const employeeUnit = meta.unit || '';
                 const raters = data.raters;
 
                 // Separate raters into managers and colleagues
@@ -787,7 +823,7 @@
                 const colleagueRaters = [];
 
                 raters.forEach(r => {
-                    if (isManagerForEmployee(r.name, employeeSection)) {
+                    if (isManagerForEmployee(r.name, name, employeeSection, employeeUnit)) {
                         managerRaters.push(r);
                     } else {
                         colleagueRaters.push(r);
@@ -836,7 +872,7 @@
                 // Add weighted info to raters for display
                 const ratersWithRole = raters.map(r => ({
                     ...r,
-                    isManager: isManagerForEmployee(r.name, employeeSection)
+                    isManager: isManagerForEmployee(r.name, name, employeeSection, employeeUnit)
                 }));
 
                 result.push({
