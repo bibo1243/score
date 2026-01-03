@@ -638,7 +638,7 @@ class ScoreHandler(SimpleHTTPRequestHandler):
             '鍾宜珮': [("主管", lambda n: n in MANAGERS, 0.5), ("少年家園教保組員", lambda n: is_in_org(n, '少年家園') and is_in_unit(n, '教保組') and n not in ALL_MANAGERS, 0.5)],
             '林品亨': [("主管", lambda n: n in MANAGERS, 0.5), ("少年家園生輔股", lambda n: is_in_org(n, '少年家園') and is_in_section(n, '保育/生輔股'), 0.4), ("少年家園教保組其他員工", lambda n: is_in_org(n, '少年家園') and is_in_unit(n, '教保組') and not is_in_section(n, '保育/生輔股') and n not in ALL_MANAGERS, 0.1)],
             '林紀騰': [("主管", lambda n: n in MANAGERS, 0.5), ("庶務股股員", lambda n: is_in_section(n, '庶務股') and n != '林紀騰', 0.3), ("行政組其他組員", lambda n: is_in_unit(n, '行政組') and not is_in_section(n, '庶務股') and n not in MANAGERS, 0.2)],
-            '王姿斐': [("主管（總幹事、社資組長）", lambda n: n in {'李冠葦', '陳淑錡'}, 0.5), ("行政組（不含廚師）", lambda n: is_in_unit(n, '行政組') and n not in {'劉春燕', '熊小蓮'}, 0.5)],
+            '王姿斐': [("主管（總幹事）", lambda n: n in {'李冠葦'}, 0.5), ("行政組（不含廚師）", lambda n: is_in_unit(n, '行政組') and n not in {'劉春燕', '熊小蓮'}, 0.5)],
             '高靜華': [("總幹事、兩家園主任", lambda n: n in {'李冠葦', '廖振杉', '廖慧雯'}, 1.0)],
             # 行政副組長: 50% 主管 + 50% 行政組員工績效
             '陳淑錡': [("主管", lambda n: n in MANAGERS, 0.5), ("行政組員", lambda n: is_in_unit(n, '行政組') and n not in MANAGERS and n != '陳淑錡', 0.5)],
