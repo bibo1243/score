@@ -492,6 +492,15 @@ async function updateScore(inputEl) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ratee, rater, cat1, cat2, cat3 })
             });
+
+            // Check if response is valid JSON (not HTML 404 page)
+            if (!response.ok) throw new Error('Server not available');
+
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error('Server not available');
+            }
+
             const result = await response.json();
             success = result.success;
             if (!success) throw new Error(result.error || 'Server update failed');
@@ -645,6 +654,13 @@ async function deleteScore(ratee, rater) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ratee, rater })
             });
+
+            if (!response.ok) throw new Error('Server not available');
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error('Server not available');
+            }
+
             const result = await response.json();
             success = result.success;
             if (!success) throw new Error(result.error || 'Delete failed');
@@ -748,6 +764,13 @@ async function restoreAllScores() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' }
             });
+
+            if (!response.ok) throw new Error('Server not available');
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error('Server not available');
+            }
+
             result = await response.json();
         } catch (serverErr) {
             console.log('Local server not available, trying Supabase...', serverErr.message);
