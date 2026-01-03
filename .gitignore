@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+venv/
+__pycache__/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+
+# Python
+*.pyc
+*.pyo
+
+# Editor
+.vscode/
+.idea/
+
+# Sensitive data (uncomment if needed)
+# score.csv
+# 工作人員名冊.csv

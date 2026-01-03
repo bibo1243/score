@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>360° 績效考核分析總覽</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=Outfit:wght@400;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <header class="main-header">
+            <div class="header-content">
+                <div class="logo-area">
+                    <i class="fa-solid fa-chart-pie logo-icon"></i>
+                    <h1>績效考核評分明細</h1>
+                </div>
+                <div class="header-controls">
+                    <div class="nav-buttons">
+                        <a href="rater-stats.html" class="nav-link" title="評分者分析">
+                            <i class="fa-solid fa-chart-bar"></i> 評分者分析
+                        </a>
+                        <a href="relationships.html" class="nav-link" title="評分關係圖">
+                            <i class="fa-solid fa-diagram-project"></i> 關係圖
+                        </a>
+                    </div>
+                    <div class="refresh-controls">
+                        <button id="refreshBtn" class="refresh-btn" title="重新載入資料">
+                            <i class="fa-solid fa-rotate"></i> 重新整理
+                        </button>
+                        <label class="auto-refresh-toggle">
+                            <input type="checkbox" id="autoRefresh"> 自動更新
+                        </label>
+                        <span class="last-update">最後更新: <span id="lastUpdate">-</span></span>
+                    </div>
+                    <div class="search-container">
+                        <i class="fa-solid fa-search search-icon"></i>
+                        <input type="text" id="searchInput" placeholder="搜尋姓名...">
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="dashboard-content">
+            <div class="stats-overview">
+                <div class="stat-card total-employees">
+                    <div class="icon-wrapper"><i class="fa-solid fa-users"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-label">總受評人數</span>
+                        <span class="stat-value" id="totalEmployees">0</span>
+                    </div>
+                </div>
+                <div class="stat-card avg-performance">
+                    <div class="icon-wrapper"><i class="fa-solid fa-star"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-label">全體平均分</span>
+                        <span class="stat-value" id="globalAverage">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="controls-bar">
+                <div class="filters-group">
+                    <select id="filterOrg" class="filter-select">
+                        <option value="">全部機構</option>
+                    </select>
+                    <select id="filterUnit" class="filter-select">
+                        <option value="">全部單位</option>
+                    </select>
+                    <select id="filterSection" class="filter-select">
+                        <option value="">全部股別</option>
+                    </select>
+                </div>
+
+                <div class="sort-controls">
+                    <span class="label">排序方式:</span>
+                    <button class="sort-btn active" data-sort="unit">單位</button>
+                    <button class="sort-btn" data-sort="name">姓名</button>
+                    <button class="sort-btn" data-sort="score">分數</button>
+                    <button class="sort-btn" data-sort="count">評分人數</button>
+                </div>
+            </div>
+
+            <div id="employeeGrid" class="employee-grid">
+                <!-- Cards will be injected here via JS -->
+            </div>
+        </main>
+    </div>
+
+    <script src="data.js"></script>
+    <script src="script.js"></script>
+</body>
+
+</html>

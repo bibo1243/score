@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>114(下)員工績效考核關係分析</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Microsoft JhengHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .tabs {
+            display: flex;
+            background: #f8f9fa;
+            border-bottom: 2px solid #e9ecef;
+            overflow-x: auto;
+        }
+        
+        .tab {
+            padding: 20px 30px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #6c757d;
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+        
+        .tab:hover {
+            background: #e9ecef;
+        }
+        
+        .tab.active {
+            color: #667eea;
+            border-bottom: 3px solid #667eea;
+            background: white;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+            animation: fadeIn 0.5s;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .unit-section {
+            margin-bottom: 40px;
+            border: 2px solid #e9ecef;
+            border-radius: 15px;
+            overflow: hidden;
+        }
+        
+        .unit-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 30px;
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+        
+        .unit-body {
+            padding: 20px;
+        }
+        
+        .employee-card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-left: 5px solid #667eea;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .employee-card:hover {
+            transform: translateX(5px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+        
+        .employee-name {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .employee-position {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            margin-bottom: 10px;
+        }
+        
+        .review-source {
+            margin-top: 15px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+        }
+        
+        .review-item {
+            display: flex;
+            align-items: center;
+            margin: 8px 0;
+            padding: 8px;
+            border-radius: 5px;
+            background: #f8f9fa;
+        }
+        
+        .review-label {
+            font-weight: 600;
+            color: #495057;
+            min-width: 180px;
+        }
+        
+        .review-value {
+            color: #667eea;
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+        
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .summary-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+        }
+        
+        .summary-number {
+            font-size: 3em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        
+        .summary-label {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .flow-diagram {
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 15px;
+            margin: 20px 0;
+        }
+        
+        .flow-item {
+            display: flex;
+            align-items: center;
+            margin: 20px 0;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .flow-icon {
+            width: 60px;
+            height: 60px;
+            background: #667eea;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-right: 20px;
+        }
+        
+        .flow-content h3 {
+            color: #333;
+            margin-bottom: 8px;
+        }
+        
+        .flow-content p {
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>114(下)員工績效考核關係分析</h1>
+            <p>完整的評分來源與關係結構圖</p>
+        </div>
+        
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('overview')">總覽</button>
+            <button class="tab" onclick="showTab('children')">兒少之家</button>
+            <button class="tab" onclick="showTab('youth')">少年家園</button>
+            <button class="tab" onclick="showTab('counsel')">諮商所</button>
+            <button class="tab" onclick="showTab('admin')">行政組</button>
+            <button class="tab" onclick="showTab('social')">社資組</button>
+            <button class="tab" onclick="showTab('education')">圖書教育組</button>
+        </div>
+        
+        <div class="content">
+            <!-- 總覽頁面 -->
+            <div id="overview" class="tab-content active">
+                <h2 style="margin-bottom: 30px; color: #333;">績效考核評分關係總覽</h2>
+                
+                <div class="summary-grid">
+                    <div class="summary-card">
+                        <div class="summary-label">總單位數</div>
+                        <div class="summary-number">6</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-label">總考核人數</div>
+                        <div class="summary-number">52</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-label">免考核人數</div>
+                        <div class="summary-number">1</div>
+                    </div>
+                </div>
+                
+                <div class="flow-diagram">
+                    <h3 style="margin-bottom: 20px; color: #333;">評分關係類型</h3>
+                    
+                    <div class="flow-item">
+                        <div class="flow-icon">A</div>
+                        <div class="flow-content">
+                            <h3>由下評上型（100%）</h3>
+                            <p>主管由下屬全體評核，適用於單位主管</p>
+                        </div>
+                    </div>
+                    
+                    <div class="flow-item">
+                        <div class="flow-icon">B</div>
+                        <div class="flow-content">
+                            <h3>主管與同儕混合型（50%+50%）</h3>
+                            <p>主管評分佔50%，同級及下屬互評佔50%</p>
+                        </div>
+                    </div>
+                    
+                    <div class="flow-item">
+                        <div class="flow-icon">C</div>
+                        <div class="flow-content">
+                            <h3>主管與多層級混合型</h3>
+                            <p>主管50% + 督導/股員30% + 其他20%</p>
+                        </div>
+                    </div>
+                    
+                    <div class="flow-item">
+                        <div class="flow-icon">D</div>
+                        <div class="flow-content">
+                            <h3>跨部門評核型</h3>
+                            <p>由不同組別員工共同評核，如社資組由主管+行政組評核</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 兒少之家 -->
+            <div id="children" class="tab-content">
+                <div class="unit-section">
+                    <div class="unit-header">兒少之家</div>
+                    <div class="unit-body">
+                        <div class="employee-card">
+                            <span class="employee-position">主管</span>
+                            <div class="employee-name">廖振杉</div>
+                            <div class="review-source">
+                                <div class="review-item">
+                                    <span class="review-label">評分來源：</span>
+                                    <span class="review-value">教保組單位主管、資深、一般員工總平均 100%</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="employee-card">
+                            <span class="employee-position">主管</span>
+                            <div class="employee-name">陳宛妤</div>
+                            <div class="review-source">
+                                <div class="review-item">
+                                    <span class="review-label">主管評分：</span>
+                                    <span class="review-value">50%</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">資深、一般員工總平均：</span>
+                                    <span class="review-value">50%</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="employee-card">
+                            <span class="employee-position">督導</span>
+                            <div class="employee-name">簡采琦</div>
+                            <div class="review-source">
+                                <div class="review-item">
+                                    <span class="review-label">評分來源：</span>
+                                    <span class="review-value">未明確標註</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="employee-card">
+                            <span class="employee-position">資深</span>
+                            <div class="employee-name">林東美、賀郁茵</div>
+                            <div class="review-source">
+                                <div class="review-item">
+                                    <span class="review-label">主管評分：</span>
+                                    <span class="review-value">50%</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">資深、一般員工互評總平均：</span>
+                                    <span class="review-value">50%</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="employee-card">
+                            <span class="employee-position">一般</span>
+                            <div class="employee-name">廖玟慈、張宜芳、蕭婷予、陳亮寧、王卉蓁、許芸嘉、李炎煇</div>
+                            <div class="review-source">
+                                <div class="review-item">
+                                    <span class="review-label">主管評分：</span>
+                                    <span class="review-value">50%</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">資深、一般員工互評總平均：</span>
+                                    <span class="review-value">50%</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="employee-card">
+                            <span class="employee-position">一般</span>
+                            <div class="employee-name">曾婷婷</div>
+                            <div class="review-source">
+                                <div class="review-item">
+                                    <span class="review-label">主管評分：</span>
+                                    <span class="review-value">50%</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">資深、一般員工互評總平均：</span>
+                                    <span class="review-value">50%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 少年家園 -->
+            <div id="youth" class="tab-content">
+                <div class="unit-section">
+                    <div class="unit-header">少年家園</div>
+                    <div class="unit-body">
+                        <div class="employee-card">
+                            <span class="employee-position">主管</span>
+                            <div class="employee-name">廖慧雯</div>
+                            <div class="review-source">
+                                <div class="review-item">
+                                    <span class="review-label">評分來源：</span>
+                                    <span class="review-value">教保組單位主管、督導、資深、一般員工總平均 100%</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="employee-card">
+                            <span class="employee-position">主管</span>
+                            <div class="employee-name">鍾宜珮</div>
+                            <div class="review-source">
+                                <div class="review-item">
+                                    <span class="review-label">主管評分：</span>
+                                    <span class="review-value">50%</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">督導、資深、一般員工總平均：</span>
+                                    <span class="review-value">50%</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="employee-card">
+                            <span class="employee-position">主管</span>
+                            <div class="employee-name">林品亨</div>
+                            <div class="review-source">
+                                <div class="review-item">
+                                    <span class="review-label">主管評分：</span>
+                                    <span class="review-value">50%</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">生輔總平均：</span>
+                                    <span class="review-value">40%</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">資深、一般員工總平均：</span>
+                                    <span class="review-value">10%</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="employee-card">
+                            <span class="employee-position">資深社工</span>
+                            <div class="employee-name">蘇盟惠、劉宛宣</div>
+                            <div class="review-source">
+                                <div class="review-item">
+                                    <span class="review-label">主管評分：</span>
+                                    <span class="review-value">50%</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">資深、一般員工員工：</span>
+                                    <span class="review-value">50%</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="employee-card">
+                            <span class="employee-position">資深生輔</span>
+                            <div class="employee-name">郭楷欣、吳秉熹、胡少淇、陳昱綸</div>
+                            <div class="review-source">
+                                <div class="review-item">
+                                    <span class="review-label">評分來源：</span>
+                                    <span class="review-value">未明確標註</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="employee-card">
+                            <span class="employee-position">一般（社工）</span>
+                            <div class="employee-name">黃穎蓁</div>
+                            <div class="review-source">
+                                <div class="review-item">
+                                    <span class="review-label">主管評分：</span>
+                                    <span class="review-value">50%</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">資深、一般員工員工：</span>
+                                    <span class="review-value">50%</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="employee-card">
+                            <span class="employee-position">一般（生輔）</span>
+                            <div class="employee-name">蔣郡哲、劉婷瑜、吳思函</div>
+                            <div class="review-source">
+                                <div class="review-item">
+                                    <span class="review-label">主管評分：</span>
+                                    <span class="review-value">50%</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">資深、一般員工：</span>
+                                    <span class="review-value">50%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 諮商所 -->
+            <div id="counsel" class="tab-content">
+                <div class="unit-section">
+                    <div class="unit-header">諮商所</div>
+                    <div class="unit-body">
+                        <div class="employee-card">
+                            <span class="employee-position">主管</span>
+                            <div class="employee-name">楊顗帆</div>
+                            <div class="review-source">
+                                <div class="review-item">
+                                    <span class="review-label">評分來源：</span>
+                                    <span class="review-value">一般員工總平均 100%</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="employee-card">
+                            <span class="employee-position">一般</span>
+                            <div class="employee-name">陳柔安、林彥秀</div>
+                            <div class="review-source">
+                                <div class="review-item">
+                                    <span class="review-label">主管評分：</span>
+                                    <span class="review-value">50%？</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">該所員工：</span>
+                                    <span class="review-value">50%？</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 行政組 -->
+            <div id="admin" class="tab-content">
+                <div class="unit-section">
+                    <div class="unit-header">行政組</div>
+                    <div class="unit-body">
+                        <div class="employee-card">
+                            <span class="employee-position">主管</span>
+                            <div class="employee-name">李冠葦</div>
+                            <div class="review-source">
+                                <div class="review-item">
+                                    <span class="review-label">評分來源：</span>
+                                    <span class="review-value">庶務股長、資深、一般員工總平均 100%</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="employee-card">
+                            <span class="employee-position">主管</span>
+                            <div class="employee-name">陳淑錡</div>
+                            <div class="review-source">
+                                <div class="review-item">
+                                    <span class="review-label">主管評分：</span>
+                                    <span class="review-value">50%</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">庶務股長、資深、一般員工總平均：</span>
+                                    <span class="review-value">50%</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="employee-card">
+                            <span class="employee-position">股長</span>
+                            <div class="employee-name">林紀騰</div>
+                            <div class="review-source">
+                                <div class="review-item">
+                                    <span class="review-label">主管評分：</span>
+                                    <span class="review-value">50%</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">該股股員總平均：</span>
+                                    <span class="review-value">30%</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">其他該組員：</span>
+                                    <span class="review-value">20%</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="employee-card">
+                            <span class="employee-position">資深</span>
+                            <div class="employee-name">王芊蓉、李鳳翎、王元鼎、林港博</div>
+                            <div class="review-source">
+                                <div class="review-item">
+                                    <span class="review-label">主管評分：</span>
+                                    <span class="review-value">50%</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">資深、一般員工：</span>
+                                    <span class="review-value">50%</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="employee-card">
+                            <span class="employee-position">一般</span>
+                            <div class="employee-name">謝秀桃、羅如光、陸廷瑋、林麗娟、徐銘澤</div>
+                            <div class="review-source">
+                                <div class="review-item">
+                                    <span class="review-label">主管評分：</span>
+                                    <span class="review-value">50%</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">資深、一般員工：</span>
+                                    <span class="review-value">50%</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="employee-card">
+                            <span class="employee-position">一般（廚師）</span>
+                            <div class="employee-name">劉春燕、熊小蓮</div>
+                            <div class="review-source">
+                                <div class="review-item">
+                                    <span class="review-label">主管（主任、組長）：</span>
+                                    <span class="review-value">50%</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">資深、一般員工：</span>
+                                    <span class="review-value">50%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 社資組 -->
+            <div id="social" class="tab-content">
+                <div class="unit-section">
+                    <div class="unit-header">社資組</div>
+                    <div class="unit-body">
+                        <div class="employee-card">
+                            <span class="employee-position">主管</span>
+                            <div class="employee-name">廖振杉</div>
+                            <div class="review-source">
+                                <div class="review-item">
+                                    <span class="review-label">評分來源：</span>
+                                    <span class="review-value">未明確標註</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="employee-card">
+                            <span class="employee-position">一般</span>
+                            <div class="employee-name">王姿斐</div>
+                            <div class="review-source">
+                                <div class="review-item">
+                                    <span class="review-label">主管（總幹事、社資組長）：</span>
+                                    <span class="review-value">50%</span>
+                                </div>
+                                <div class="review-item">
+                                    <span class="review-label">行政組（不含廚師）：</span>
+                                    <span class="review-value">50%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 圖書教育組 -->
+            <div id="education" class="tab-content">
+                <div class="unit-section">
+                    <div class="unit-header">圖書教育組</div>
+                    <div class="unit-body">
+                        <div class="employee-card">
+                            <span class="employee-position">主管</span>
+                            <div class="employee-name">高靜華</div>
+                            <div class="review-source">
+                                <div class="review-item">
+                                    <span class="review-label">評分來源：</span>
+                                    <span class="review-value">總幹事、兩家園主任考核之總平均 100%</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="employee-card" style="border-left-color: #dc3545;">
+                            <span class="employee-position" style="background: #dc3545;">免考核</span>
+                            <div class="employee-name">淨惠</div>
+                            <div class="review-source">
+                                <div class="review-item">
+                                    <span class="review-label">備註：</span>
+                                    <span class="review-value">免考核人員</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function showTab(tabName) {
+            // 隱藏所有內容
+            const contents = document.querySelectorAll('.tab-content');
+            contents.forEach(content => content.classList.remove('active'));
+            
+            // 移除所有標籤的 active 狀態
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach(tab => tab.classList.remove('active'));
+            
+            // 顯示選中的內容
+            document.getElementById(tabName).classList.add('active');
+            
+            // 設置選中的標籤為 active
+            event.target.classList.add('active');
+        }
+    </script>
+</body>
+</html>

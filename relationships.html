@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>評分關係圖 - 員工考核系統</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Outfit:wght@400;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #6366f1;
+            --primary-dark: #4f46e5;
+            --bg-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --card-bg: #ffffff;
+            --font-display: 'Outfit', sans-serif;
+            --font-body: 'Noto Sans TC', sans-serif;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-body);
+            background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4c1d95 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 100%;
+            padding: 1rem;
+        }
+
+        header {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            color: white;
+            padding: 1.5rem 2rem;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        header h1 {
+            font-family: var(--font-display);
+            font-size: 1.75rem;
+            margin-bottom: 0.5rem;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        header p {
+            opacity: 0.85;
+            font-size: 0.95rem;
+        }
+
+        .nav-links {
+            margin-top: 1rem;
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 0.5rem;
+            font-size: 0.9rem;
+            transition: all 0.3s;
+        }
+
+        .nav-links a:hover {
+            background: rgba(255, 255, 255, 0.25);
+            transform: translateY(-2px);
+        }
+
+        .controls {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 1rem;
+            padding: 1.25rem 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+            display: flex;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+            align-items: center;
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .control-group label {
+            font-weight: 600;
+            color: #334155;
+        }
+
+        .control-group select,
+        .control-group input {
+            padding: 0.5rem 1rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 0.5rem;
+            font-size: 0.9rem;
+            transition: all 0.3s;
+        }
+
+        .control-group select:focus,
+        .control-group input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+        }
+
+        .legend {
+            display: flex;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+            margin-left: auto;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: #475569;
+        }
+
+        .legend-dot {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        #graph-container {
+            background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+            border-radius: 1.5rem;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            height: calc(100vh - 240px);
+            min-height: 500px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .stats-bar {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 1rem;
+            padding: 1.25rem 1.5rem;
+            margin-top: 1rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+            display: flex;
+            gap: 3rem;
+            flex-wrap: wrap;
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .stat-value {
+            font-weight: 700;
+            font-size: 1.5rem;
+            background: linear-gradient(135deg, var(--primary-color), #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-family: var(--font-display);
+        }
+
+        .stat-label {
+            color: #64748b;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .tooltip {
+            position: absolute;
+            background: rgba(30, 41, 59, 0.95);
+            color: white;
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.85rem;
+            pointer-events: none;
+            z-index: 1000;
+            max-width: 300px;
+        }
+
+        .help-text {
+            color: #94a3b8;
+            font-size: 0.8rem;
+            margin-left: auto;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1><i class="fa-solid fa-diagram-project"></i> 評分關係圖</h1>
+        <p>顯示所有員工之間的評分關係網絡</p>
+        <div class="nav-links">
+            <a href="index.html"><i class="fa-solid fa-arrow-left"></i> 返回考核總覽</a>
+            <a href="rater-stats.html"><i class="fa-solid fa-chart-bar"></i> 評分者分析</a>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="controls">
+            <div class="control-group">
+                <label>篩選機構:</label>
+                <select id="filterOrg">
+                    <option value="">全部機構</option>
+                    <option value="基金會">基金會</option>
+                    <option value="兒少之家">兒少之家</option>
+                    <option value="少年家園">少年家園</option>
+                    <option value="諮商所">諮商所</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label>搜尋:</label>
+                <input type="text" id="searchInput" placeholder="輸入姓名...">
+            </div>
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: #6366f1;"></div>
+                    <span>基金會</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: #10b981;"></div>
+                    <span>兒少之家</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: #f59e0b;"></div>
+                    <span>少年家園</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: #ef4444;"></div>
+                    <span>諮商所</span>
+                </div>
+            </div>
+            <span class="help-text"><i class="fa-solid fa-mouse-pointer"></i> 點擊圓點查看評分關係，點空白處恢復</span>
+        </div>
+
+        <div id="graph-container"></div>
+
+        <div class="stats-bar">
+            <div class="stat-item">
+                <span class="stat-value" id="nodeCount">0</span>
+                <span class="stat-label">員工人數</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value" id="edgeCount">0</span>
+                <span class="stat-label">評分關係數</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value" id="avgScore">0</span>
+                <span class="stat-label">平均評分</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="relationships-data.js"></script>
+    <script>
+        const orgColors = {
+            '基金會': '#6366f1',
+            '兒少之家': '#10b981',
+            '少年家園': '#f59e0b',
+            '諮商所': '#ef4444',
+            '未分類': '#94a3b8'
+        };
+
+        let network = null;
+        let allData = { nodes: [], edges: [] };
+
+        async function loadData() {
+            try {
+                // Try static data first, then fallback to API
+                let data;
+                if (typeof RELATIONSHIPS_DATA !== 'undefined') {
+                    data = RELATIONSHIPS_DATA;
+                } else {
+                    const response = await fetch('/api/relationships');
+                    data = await response.json();
+                }
+                allData = data;
+
+                // Update stats
+                document.getElementById('nodeCount').textContent = data.nodes.length;
+                document.getElementById('edgeCount').textContent = data.edges.length;
+
+                const avgScore = data.edges.length > 0
+                    ? (data.edges.reduce((sum, e) => sum + e.score, 0) / data.edges.length).toFixed(1)
+                    : 0;
+                document.getElementById('avgScore').textContent = avgScore;
+
+                renderGraph(data);
+            } catch (err) {
+                console.error('Failed to load data:', err);
+            }
+        }
+
+        function filterData(orgFilter, searchTerm) {
+            let nodes = allData.nodes;
+            let edges = allData.edges;
+
+            if (orgFilter) {
+                const filteredNodeIds = new Set(nodes.filter(n => n.org === orgFilter).map(n => n.id));
+                nodes = nodes.filter(n => filteredNodeIds.has(n.id));
+                edges = edges.filter(e => filteredNodeIds.has(e.from) || filteredNodeIds.has(e.to));
+            }
+
+            if (searchTerm) {
+                const term = searchTerm.toLowerCase();
+                const matchedNodeIds = new Set(nodes.filter(n => n.label.toLowerCase().includes(term)).map(n => n.id));
+
+                // Include nodes that are connected to matched nodes
+                edges.forEach(e => {
+                    if (matchedNodeIds.has(e.from)) matchedNodeIds.add(e.to);
+                    if (matchedNodeIds.has(e.to)) matchedNodeIds.add(e.from);
+                });
+
+                nodes = nodes.filter(n => matchedNodeIds.has(n.id));
+                edges = edges.filter(e => matchedNodeIds.has(e.from) && matchedNodeIds.has(e.to));
+            }
+
+            return { nodes, edges };
+        }
+
+        function renderGraph(data) {
+            const container = document.getElementById('graph-container');
+
+            // Transform nodes for vis.js - use box shape for better label visibility
+            const visNodes = data.nodes.map(n => ({
+                id: n.id,
+                label: n.label,
+                color: {
+                    background: orgColors[n.org] || orgColors['未分類'],
+                    border: '#ffffff',
+                    highlight: {
+                        background: orgColors[n.org] || orgColors['未分類'],
+                        border: '#fbbf24'
+                    }
+                },
+                font: {
+                    color: '#ffffff',
+                    size: 13,
+                    face: 'Noto Sans TC',
+                    strokeWidth: 3,
+                    strokeColor: 'rgba(0, 0, 0, 0.7)'
+                },
+                shape: 'dot',
+                size: 22 + Math.min(data.edges.filter(e => e.from === n.id || e.to === n.id).length * 1.5, 18),
+                borderWidth: 2,
+                shadow: {
+                    enabled: true,
+                    color: 'rgba(0, 0, 0, 0.3)',
+                    size: 10,
+                    x: 3,
+                    y: 3
+                },
+                title: `${n.label} (${n.org})`
+            }));
+
+            // Transform edges for vis.js
+            const visEdges = data.edges.map(e => ({
+                from: e.from,
+                to: e.to,
+                arrows: { to: { enabled: true, scaleFactor: 0.5 } },
+                color: {
+                    color: e.score >= 90 ? '#34d399' : e.score >= 80 ? '#818cf8' : e.score >= 70 ? '#fbbf24' : '#f87171',
+                    opacity: 0.5,
+                    highlight: e.score >= 90 ? '#10b981' : e.score >= 80 ? '#6366f1' : e.score >= 70 ? '#f59e0b' : '#ef4444'
+                },
+                width: 1.5,
+                smooth: { type: 'curvedCW', roundness: 0.15 },
+                title: `${e.from} → ${e.to}: ${e.score}分`
+            }));
+
+            const visData = {
+                nodes: new vis.DataSet(visNodes),
+                edges: new vis.DataSet(visEdges)
+            };
+
+            // Pre-calculate positions in a circular layout by organization
+            const orgGroups = {};
+            data.nodes.forEach(n => {
+                if (!orgGroups[n.org]) orgGroups[n.org] = [];
+                orgGroups[n.org].push(n.id);
+            });
+
+            const orgList = Object.keys(orgGroups);
+            const orgAngleStep = (2 * Math.PI) / orgList.length;
+            const orgRadius = 350;
+            const nodeRadius = 120;
+
+            orgList.forEach((org, orgIndex) => {
+                const orgAngle = orgAngleStep * orgIndex - Math.PI / 2;
+                const orgCenterX = orgRadius * Math.cos(orgAngle);
+                const orgCenterY = orgRadius * Math.sin(orgAngle);
+
+                const nodes = orgGroups[org];
+                const nodeAngleStep = (2 * Math.PI) / nodes.length;
+
+                nodes.forEach((nodeId, nodeIndex) => {
+                    const nodeAngle = nodeAngleStep * nodeIndex;
+                    const x = orgCenterX + nodeRadius * Math.cos(nodeAngle);
+                    const y = orgCenterY + nodeRadius * Math.sin(nodeAngle);
+                    visData.nodes.update({ id: nodeId, x: x, y: y });
+                });
+            });
+
+            const options = {
+                nodes: {
+                    borderWidth: 2,
+                    shadow: true
+                },
+                edges: {
+                    smooth: {
+                        type: 'curvedCW',
+                        roundness: 0.15
+                    }
+                },
+                physics: {
+                    enabled: false
+                },
+                interaction: {
+                    hover: true,
+                    tooltipDelay: 100,
+                    zoomView: true,
+                    dragView: true
+                }
+            };
+
+            if (network) {
+                network.destroy();
+            }
+
+            network = new vis.Network(container, visData, options);
+
+            // Store original positions after stabilization
+            let originalPositions = {};
+
+            network.on('stabilized', function () {
+                // Disable physics after initial layout
+                network.setOptions({ physics: { enabled: false } });
+
+                // Save positions
+                network.getPositions().forEach = undefined; // workaround
+                const positions = network.getPositions();
+                for (const nodeId in positions) {
+                    originalPositions[nodeId] = { ...positions[nodeId] };
+                }
+            });
+
+            // Add click event - expand connected nodes
+            network.on('click', function (params) {
+                if (params.nodes.length > 0) {
+                    const nodeId = params.nodes[0];
+                    expandConnections(nodeId, visData, originalPositions);
+                } else {
+                    // Click on blank space - restore original positions
+                    restorePositions(visData, originalPositions);
+                }
+            });
+
+            network.on('doubleClick', function (params) {
+                if (params.nodes.length > 0) {
+                    const nodeId = params.nodes[0];
+                    window.location.href = `index.html?search=${encodeURIComponent(nodeId)}`;
+                }
+            });
+        }
+
+        function expandConnections(nodeId, visData, originalPositions) {
+            // Get connected edges and nodes
+            const connectedEdges = allData.edges.filter(e => e.from === nodeId || e.to === nodeId);
+            const connectedNodeIds = new Set([nodeId]);
+            connectedEdges.forEach(e => {
+                connectedNodeIds.add(e.from);
+                connectedNodeIds.add(e.to);
+            });
+
+            // Get center node position
+            const centerPos = network.getPositions([nodeId])[nodeId];
+            if (!centerPos) return;
+
+            // Arrange connected nodes in a circle around center
+            const connectedArray = Array.from(connectedNodeIds).filter(id => id !== nodeId);
+            const radius = 200;
+
+            connectedArray.forEach((id, index) => {
+                const angle = (2 * Math.PI * index) / connectedArray.length;
+                const x = centerPos.x + radius * Math.cos(angle);
+                const y = centerPos.y + radius * Math.sin(angle);
+                network.moveNode(id, x, y);
+            });
+
+            // Dim non-connected nodes
+            visData.nodes.forEach(n => {
+                if (connectedNodeIds.has(n.id)) {
+                    visData.nodes.update({
+                        id: n.id,
+                        opacity: 1,
+                        font: {
+                            size: n.id === nodeId ? 16 : 13,
+                            color: '#ffffff',
+                            strokeWidth: 3,
+                            strokeColor: 'rgba(0, 0, 0, 0.8)'
+                        },
+                        borderWidth: n.id === nodeId ? 4 : 2
+                    });
+                } else {
+                    visData.nodes.update({
+                        id: n.id,
+                        opacity: 0.15,
+                        font: {
+                            size: 10,
+                            color: 'rgba(255, 255, 255, 0.3)',
+                            strokeWidth: 0
+                        }
+                    });
+                }
+            });
+
+            // Fit view to show expanded connections
+            network.fit({
+                nodes: Array.from(connectedNodeIds),
+                animation: { duration: 500, easingFunction: 'easeInOutQuad' }
+            });
+        }
+
+        function restorePositions(visData, originalPositions) {
+            // Restore all node positions
+            for (const nodeId in originalPositions) {
+                network.moveNode(nodeId, originalPositions[nodeId].x, originalPositions[nodeId].y);
+            }
+
+            // Restore all node appearances
+            visData.nodes.forEach(n => {
+                visData.nodes.update({
+                    id: n.id,
+                    opacity: 1,
+                    font: {
+                        size: 13,
+                        color: '#ffffff',
+                        strokeWidth: 3,
+                        strokeColor: 'rgba(0, 0, 0, 0.7)'
+                    },
+                    borderWidth: 2
+                });
+            });
+
+            // Fit all nodes in view
+            network.fit({
+                animation: { duration: 500, easingFunction: 'easeInOutQuad' }
+            });
+        }
+
+        function highlightConnections(nodeId, visData) {
+            // Get connected edges
+            const connectedEdges = allData.edges.filter(e => e.from === nodeId || e.to === nodeId);
+            const connectedNodeIds = new Set([nodeId]);
+            connectedEdges.forEach(e => {
+                connectedNodeIds.add(e.from);
+                connectedNodeIds.add(e.to);
+            });
+
+            // Update node colors
+            visData.nodes.forEach(n => {
+                if (connectedNodeIds.has(n.id)) {
+                    visData.nodes.update({
+                        id: n.id,
+                        opacity: 1,
+                        borderWidth: n.id === nodeId ? 4 : 2
+                    });
+                } else {
+                    visData.nodes.update({
+                        id: n.id,
+                        opacity: 0.3
+                    });
+                }
+            });
+        }
+
+        // Event listeners
+        document.getElementById('filterOrg').addEventListener('change', (e) => {
+            const searchTerm = document.getElementById('searchInput').value;
+            const filtered = filterData(e.target.value, searchTerm);
+            renderGraph(filtered);
+        });
+
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            const orgFilter = document.getElementById('filterOrg').value;
+            const filtered = filterData(orgFilter, e.target.value);
+            renderGraph(filtered);
+        });
+
+        loadData();
+    </script>
+</body>
+
+</html>
