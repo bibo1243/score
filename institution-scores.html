@@ -746,9 +746,50 @@
             const SPECIAL_EMPLOYEE_MANAGERS = {
                 // 王姿斐 社資組，主管只有總幹事
                 '王姿斐': new Set(['李冠葦']),
-                // 高靜華 只被總幹事和兩家園主任評分
+                // 高靜華 只被總幹事和兩家園主任評分 (100%)
                 '高靜華': new Set(['李冠葦', '廖振杉', '廖慧雯']),
+                // 陳宛妤 兒少之家教保組長，主管是 MANAGERS
+                '陳宛妤': MANAGERS,
+                // 鍾宜珮 少年家園教保組長，主管是 MANAGERS  
+                '鍾宜珮': MANAGERS,
+                // 簡采琦 社工股長，主管是 MANAGERS
+                '簡采琦': MANAGERS,
+                // 林品亨 生輔股長，主管是 MANAGERS
+                '林品亨': MANAGERS,
+                // 林紀騰 庶務股長，主管是 MANAGERS
+                '林紀騰': MANAGERS,
+                // 陳淑錡 行政副組長，主管是 MANAGERS
+                '陳淑錡': MANAGERS,
+                // 機構主管：董事長對他們來說是主管（但評分資料中可能沒有董事長）
+                '李冠葦': new Set(['董事長']),
+                '廖振杉': new Set(['董事長']),
+                '廖慧雯': new Set(['董事長']),
+                '楊顗帆': new Set(['董事長']),
             };
+
+            // Helper to get staff meta for a rater
+            function getRaterMeta(raterName) {
+                return staffMeta[raterName] || { org: '', unit: '', section: '' };
+            }
+
+            // Helper to check if rater is in same org
+            function isInOrg(raterName, targetOrg) {
+                return getRaterMeta(raterName).org === targetOrg;
+            }
+
+            // Helper to check if rater is in same unit
+            function isInUnit(raterName, targetUnit) {
+                return getRaterMeta(raterName).unit === targetUnit;
+            }
+
+            // Helper to check if rater is in same section
+            function isInSection(raterName, targetSection) {
+                const section = getRaterMeta(raterName).section || '';
+                if (['保育股', '保育/生輔股', '生輔股'].includes(targetSection)) {
+                    return ['保育股', '保育/生輔股', '生輔股'].includes(section);
+                }
+                return section === targetSection;
+            }
 
             // Helper function to get unit managers
             function getUnitManagers(unit) {
