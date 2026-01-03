@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>各機構考核分數明細表</title>
+    <style>
+        :root {
+            --primary-color: #4f46e5;
+            --primary-light: #818cf8;
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --border-color: #e2e8f0;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans TC', sans-serif;
+            background: var(--bg-color);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%);
+            color: white;
+            padding: 30px 20px;
+            margin-bottom: 30px;
+            border-radius: 16px;
+            box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2);
+        }
+
+        header h1 {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            opacity: 0.9;
+            font-size: 1rem;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            transition: background 0.2s;
+        }
+
+        .nav-links a:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .formula-section {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 30px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .formula-section h2 {
+            color: var(--primary-color);
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        .formula-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .formula-card {
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+            border-radius: 12px;
+            padding: 20px;
+            border-left: 4px solid var(--primary-color);
+        }
+
+        .formula-card h3 {
+            color: var(--primary-color);
+            margin-bottom: 12px;
+            font-size: 1.1rem;
+        }
+
+        .formula-card .formula {
+            font-family: 'Monaco', 'Consolas', monospace;
+            background: white;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            margin-bottom: 10px;
+            border: 1px solid var(--border-color);
+        }
+
+        .formula-card .description {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .weight-table {
+            width: 100%;
+            margin-top: 15px;
+            border-collapse: collapse;
+        }
+
+        .weight-table th,
+        .weight-table td {
+            padding: 10px 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .weight-table th {
+            background: var(--primary-color);
+            color: white;
+            font-weight: 600;
+        }
+
+        .weight-table tr:nth-child(even) {
+            background: #f8fafc;
+        }
+
+        .weight-table tr:hover {
+            background: #e2e8f0;
+        }
+
+        .org-section {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 30px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .org-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            cursor: pointer;
+        }
+
+        .org-header h2 {
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .org-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .org-badge.foundation {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .org-badge.home {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .org-badge.garden {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .org-badge.counsel {
+            background: #f3e8ff;
+            color: #6b21a8;
+        }
+
+        .score-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.95rem;
+        }
+
+        .score-table th {
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+            color: var(--text-primary);
+            padding: 12px 10px;
+            text-align: center;
+            font-weight: 600;
+            border-bottom: 2px solid var(--primary-color);
+            position: sticky;
+            top: 0;
+        }
+
+        .score-table td {
+            padding: 12px 10px;
+            text-align: center;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .score-table td.name-col {
+            text-align: left;
+            font-weight: 500;
+        }
+
+        .score-table tr:hover {
+            background: #f8fafc;
+        }
+
+        .score-table .total-score {
+            font-weight: 700;
+            color: var(--primary-color);
+            font-size: 1.1rem;
+        }
+
+        .score-table .formula-col {
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            text-align: left;
+            max-width: 300px;
+        }
+
+        .calc-breakdown {
+            display: none;
+            background: #f8fafc;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-size: 0.85rem;
+        }
+
+        .calc-breakdown.show {
+            display: block;
+        }
+
+        .expand-btn {
+            background: none;
+            border: none;
+            color: var(--primary-color);
+            cursor: pointer;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .expand-btn:hover {
+            text-decoration: underline;
+        }
+
+        .rounding-note {
+            background: #fffbeb;
+            border: 1px solid #fbbf24;
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-top: 15px;
+            font-size: 0.9rem;
+        }
+
+        .rounding-note strong {
+            color: #92400e;
+        }
+
+        .legend {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-top: 15px;
+            padding: 15px;
+            background: #f8fafc;
+            border-radius: 8px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+        }
+
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 4px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 60px;
+            color: var(--text-secondary);
+        }
+
+        .loading::after {
+            content: '';
+            display: inline-block;
+            width: 30px;
+            height: 30px;
+            border: 3px solid var(--border-color);
+            border-top-color: var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 15px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .summary-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .stat-card .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+        .stat-card .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        @media (max-width: 768px) {
+            .formula-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .score-table {
+                font-size: 0.8rem;
+            }
+
+            .score-table th,
+            .score-table td {
+                padding: 8px 5px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 各機構考核分數明細表</h1>
+            <p>績效考核分數計算方式、權重配比與加總規則</p>
+            <div class="nav-links">
+                <a href="index.html">← 返回主頁</a>
+                <a href="rater-stats.html">評分者統計</a>
+                <a href="relationships.html">關係圖</a>
+            </div>
+        </header>
+
+        <!-- 計算規則說明 -->
+        <section class="formula-section">
+            <h2>📐 分數計算規則說明</h2>
+
+            <div class="formula-grid">
+                <div class="formula-card">
+                    <h3>1️⃣ 三大類分數</h3>
+                    <div class="formula">
+                        第一大類：滿分 40 分<br>
+                        第二大類：滿分 30 分<br>
+                        第三大類：滿分 30 分
+                    </div>
+                    <div class="description">
+                        每位評分者針對三大類分別給分，各類滿分如上所示。
+                    </div>
+                </div>
+
+                <div class="formula-card">
+                    <h3>2️⃣ 類別平均計算</h3>
+                    <div class="formula">
+                        類別平均 = Σ(各評分者該類分數) ÷ 評分人數
+                    </div>
+                    <div class="description">
+                        將所有評分者對該類別的給分加總後，除以評分人數。
+                    </div>
+                </div>
+
+                <div class="formula-card">
+                    <h3>3️⃣ 進位規則</h3>
+                    <div class="formula">
+                        小數點第一位 ≥ 1 → 無條件進位<br>
+                        小數點第一位 = 0 → 無條件捨去
+                    </div>
+                    <div class="description">
+                        例：35.1 → 36、35.0 → 35、24.9 → 25
+                    </div>
+                </div>
+
+                <div class="formula-card">
+                    <h3>4️⃣ 總分計算</h3>
+                    <div class="formula">
+                        總分 = 第一大類(進位後) + 第二大類(進位後) + 第三大類(進位後)
+                    </div>
+                    <div class="description">
+                        將三個類別各自進位後的整數相加，得到最終總分。
+                    </div>
+                </div>
+            </div>
+
+            <div class="rounding-note">
+                <strong>⚠️ 重要說明：</strong>
+                權重計算僅適用於特定員工（如主管級、機構首長等）。
+                一般員工採用簡單平均（所有評分者權重相等）。
+            </div>
+        </section>
+
+        <!-- 權重配比說明 -->
+        <section class="formula-section">
+            <h2>⚖️ 權重配比規則</h2>
+
+            <table class="weight-table">
+                <thead>
+                    <tr>
+                        <th>適用對象</th>
+                        <th>評分來源</th>
+                        <th>權重</th>
+                        <th>說明</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>一般員工</strong></td>
+                        <td>主管評分</td>
+                        <td>50%</td>
+                        <td>由直屬主管及相關主管評分</td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td>其他同仁評分</td>
+                        <td>50%</td>
+                        <td>由同組/同股別同仁互評</td>
+                    </tr>
+                    <tr>
+                        <td><strong>股長/督導</strong></td>
+                        <td>主管評分</td>
+                        <td>50%</td>
+                        <td>由機構首長等主管評分</td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td>股員績效平均</td>
+                        <td>30-50%</td>
+                        <td>所管理股別員工的平均績效</td>
+                    </tr>
+                    <tr>
+                        <td><strong>組長</strong></td>
+                        <td>主管評分</td>
+                        <td>50%</td>
+                        <td>由機構首長評分</td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td>組員績效平均</td>
+                        <td>50%</td>
+                        <td>所管理組別員工的平均績效</td>
+                    </tr>
+                    <tr>
+                        <td><strong>機構首長</strong></td>
+                        <td>董事長評分</td>
+                        <td>50%</td>
+                        <td>由董事長直接評分</td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td>機構員工績效平均</td>
+                        <td>50%</td>
+                        <td>所管轄機構所有員工的平均績效</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #dbeafe;"></div>
+                    <span>基金會</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #dcfce7;"></div>
+                    <span>兒少之家</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #fef3c7;"></div>
+                    <span>少年家園</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #f3e8ff;"></div>
+                    <span>諮商所</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- 機構分數表格 -->
+        <div id="org-tables">
+            <div class="loading">載入資料中...</div>
+        </div>
+    </div>
+
+    <script src="supabase-client.js"></script>
+    <script>
+        // Organization order
+        const ORG_ORDER = ['基金會', '兒少之家', '少年家園', '諮商所'];
+        const ORG_BADGES = {
+            '基金會': 'foundation',
+            '兒少之家': 'home',
+            '少年家園': 'garden',
+            '諮商所': 'counsel'
+        };
+
+        async function loadData() {
+            try {
+                const response = await fetch('/api/scores');
+                const data = await response.json();
+                renderOrgTables(data);
+            } catch (err) {
+                // Try Supabase directly
+                console.log('Using Supabase directly...');
+                const scores = await fetchScores();
+                const processed = await processLocalData(scores);
+                renderOrgTables(processed);
+            }
+        }
+
+        async function processLocalData(rawScores) {
+            // Simple processing for display
+            const employees = {};
+
+            rawScores.forEach(row => {
+                const ratee = row.ratee;
+                if (!ratee) return;
+
+                if (!employees[ratee]) {
+                    employees[ratee] = {
+                        name: ratee,
+                        raters: [],
+                        cat1s: [],
+                        cat2s: [],
+                        cat3s: []
+                    };
+                }
+
+                employees[ratee].raters.push({
+                    name: row.rater,
+                    cat1: parseFloat(row.cat1) || 0,
+                    cat2: parseFloat(row.cat2) || 0,
+                    cat3: parseFloat(row.cat3) || 0
+                });
+                employees[ratee].cat1s.push(parseFloat(row.cat1) || 0);
+                employees[ratee].cat2s.push(parseFloat(row.cat2) || 0);
+                employees[ratee].cat3s.push(parseFloat(row.cat3) || 0);
+            });
+
+            // Load staff meta
+            const staffMeta = await loadStaffMeta();
+
+            // Calculate averages
+            const result = [];
+            for (const [name, data] of Object.entries(employees)) {
+                const cat1Avg = data.cat1s.reduce((a, b) => a + b, 0) / data.cat1s.length;
+                const cat2Avg = data.cat2s.reduce((a, b) => a + b, 0) / data.cat2s.length;
+                const cat3Avg = data.cat3s.reduce((a, b) => a + b, 0) / data.cat3s.length;
+
+                const cat1Rounded = customRound(cat1Avg);
+                const cat2Rounded = customRound(cat2Avg);
+                const cat3Rounded = customRound(cat3Avg);
+
+                const meta = staffMeta[name] || { org: '未分類', unit: '', section: '' };
+
+                result.push({
+                    name: name,
+                    org: meta.org || '未分類',
+                    unit: meta.unit || '',
+                    cat1_avg: cat1Avg,
+                    cat2_avg: cat2Avg,
+                    cat3_avg: cat3Avg,
+                    cat1_rounded: cat1Rounded,
+                    cat2_rounded: cat2Rounded,
+                    cat3_rounded: cat3Rounded,
+                    average_score: cat1Rounded + cat2Rounded + cat3Rounded,
+                    rater_count: data.raters.length,
+                    raters: data.raters
+                });
+            }
+
+            return result;
+        }
+
+        async function loadStaffMeta() {
+            try {
+                const response = await fetch('工作人員名冊.csv');
+                const text = await response.text();
+                return parseStaffCSV(text);
+            } catch (e) {
+                return {};
+            }
+        }
+
+        function parseStaffCSV(csvText) {
+            const lines = csvText.split('\n');
+            if (lines.length < 2) return {};
+            const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+            const meta = {};
+
+            for (let i = 1; i < lines.length; i++) {
+                const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+                if (values.length < headers.length) continue;
+                const row = {};
+                headers.forEach((h, idx) => row[h] = values[idx] || '');
+                const name = row['員工姓名'];
+                if (name) {
+                    let org = row['所屬機構'] || '';
+                    const unit = row['所屬單位'] || '';
+                    const section = row['股別'] || '';
+
+                    // Normalize
+                    if (['行政組', '社資組', '人資公關組', '圖書組', '會計室'].includes(unit)) {
+                        org = '基金會';
+                    } else if (org.includes('基金會')) {
+                        org = '基金會';
+                    } else if (org.includes('兒少') || unit === '兒少之家') {
+                        org = '兒少之家';
+                    } else if (org.includes('少年') || unit === '少年家園') {
+                        org = '少年家園';
+                    } else if (org.includes('諮商')) {
+                        org = '諮商所';
+                    }
+
+                    meta[name] = { org, unit, section };
+                }
+            }
+            return meta;
+        }
+
+        function customRound(value) {
+            const firstDecimal = Math.floor((value * 10) % 10);
+            if (firstDecimal >= 1) {
+                return Math.ceil(value);
+            } else {
+                return Math.floor(value);
+            }
+        }
+
+        function renderOrgTables(data) {
+            const container = document.getElementById('org-tables');
+
+            // Group by org
+            const orgData = {};
+            ORG_ORDER.forEach(org => orgData[org] = []);
+
+            data.forEach(emp => {
+                const org = emp.org || '未分類';
+                if (!orgData[org]) orgData[org] = [];
+                orgData[org].push(emp);
+            });
+
+            // Sort each org by score descending
+            for (const org in orgData) {
+                orgData[org].sort((a, b) => b.average_score - a.average_score);
+            }
+
+            let html = '';
+
+            // Summary stats
+            const totalEmployees = data.length;
+            const avgScore = data.length > 0
+                ? (data.reduce((sum, e) => sum + e.average_score, 0) / data.length).toFixed(1)
+                : 0;
+
+            html += `
+                <div class="summary-stats">
+                    <div class="stat-card">
+                        <div class="stat-value">${totalEmployees}</div>
+                        <div class="stat-label">總人數</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${avgScore}</div>
+                        <div class="stat-label">平均分數</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${Object.keys(orgData).filter(k => orgData[k].length > 0).length}</div>
+                        <div class="stat-label">機構數</div>
+                    </div>
+                </div>
+            `;
+
+            // Render each org
+            ORG_ORDER.forEach(org => {
+                const employees = orgData[org];
+                if (!employees || employees.length === 0) return;
+
+                const badgeClass = ORG_BADGES[org] || '';
+                const orgAvg = (employees.reduce((s, e) => s + e.average_score, 0) / employees.length).toFixed(1);
+
+                html += `
+                    <section class="org-section">
+                        <div class="org-header">
+                            <h2>
+                                <span class="org-badge ${badgeClass}">${org}</span>
+                                <span style="margin-left: 10px; font-size: 0.9rem; color: var(--text-secondary);">
+                                    ${employees.length} 人 | 平均 ${orgAvg} 分
+                                </span>
+                            </h2>
+                        </div>
+                        <table class="score-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 50px;">排名</th>
+                                    <th style="text-align: left;">姓名</th>
+                                    <th>評分人數</th>
+                                    <th>第一大類<br><small>(滿分40)</small></th>
+                                    <th>第二大類<br><small>(滿分30)</small></th>
+                                    <th>第三大類<br><small>(滿分30)</small></th>
+                                    <th>總分</th>
+                                    <th style="text-align: left;">計算式</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+
+                employees.forEach((emp, idx) => {
+                    const cat1Avg = emp.cat1_avg ? emp.cat1_avg.toFixed(2) : '0.00';
+                    const cat2Avg = emp.cat2_avg ? emp.cat2_avg.toFixed(2) : '0.00';
+                    const cat3Avg = emp.cat3_avg ? emp.cat3_avg.toFixed(2) : '0.00';
+
+                    const formula = `${cat1Avg}→${emp.cat1_rounded} + ${cat2Avg}→${emp.cat2_rounded} + ${cat3Avg}→${emp.cat3_rounded} = ${emp.average_score}`;
+
+                    html += `
+                        <tr>
+                            <td>${idx + 1}</td>
+                            <td class="name-col">${emp.name}</td>
+                            <td>${emp.rater_count || 0}</td>
+                            <td>
+                                <div style="font-size: 1.1rem; font-weight: 600;">${emp.cat1_rounded}</div>
+                                <div style="font-size: 0.75rem; color: var(--text-secondary);">(${cat1Avg})</div>
+                            </td>
+                            <td>
+                                <div style="font-size: 1.1rem; font-weight: 600;">${emp.cat2_rounded}</div>
+                                <div style="font-size: 0.75rem; color: var(--text-secondary);">(${cat2Avg})</div>
+                            </td>
+                            <td>
+                                <div style="font-size: 1.1rem; font-weight: 600;">${emp.cat3_rounded}</div>
+                                <div style="font-size: 0.75rem; color: var(--text-secondary);">(${cat3Avg})</div>
+                            </td>
+                            <td class="total-score">${emp.average_score}</td>
+                            <td class="formula-col">${formula}</td>
+                        </tr>
+                    `;
+                });
+
+                html += `
+                            </tbody>
+                        </table>
+                    </section>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', loadData);
+    </script>
+</body>
+
+</html>
