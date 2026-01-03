@@ -1,18 +1,50 @@
 #!/usr/bin/env python3
 """
 Real-time Score Analysis Server
-Reads score.csv on each request and serves updated data.
+Uses Supabase database for score storage.
 """
 
 import csv
 import json
 import os
+import urllib.request
+import urllib.error
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse
 from collections import defaultdict
 
 PORT = 8080
 BASE_DIR = '/Users/leegary/考核'
+
+# Supabase configuration
+SUPABASE_URL = "https://acrkclmderqewcwugsnl.supabase.co"
+SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFjcmtjbG1kZXJxZXdjd3Vnc25sIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NjI1NzQzMCwiZXhwIjoyMDgxODMzNDMwfQ.ZCQl_0dsfPdkG43zQsF47lbbhA6ybiGLa2fw0zSKGzQ"
+USE_SUPABASE = True  # Set to False to use CSV file instead
+
+def supabase_request(endpoint, method='GET', data=None, params=None):
+    """Make a request to Supabase REST API"""
+    url = f"{SUPABASE_URL}/rest/v1/{endpoint}"
+    if params:
+        url += '?' + '&'.join([f"{k}={v}" for k, v in params.items()])
+    
+    headers = {
+        'apikey': SUPABASE_SERVICE_KEY,
+        'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+    }
+    
+    req_data = json.dumps(data).encode('utf-8') if data else None
+    req = urllib.request.Request(url, data=req_data, headers=headers, method=method)
+    
+    try:
+        with urllib.request.urlopen(req) as response:
+            return json.loads(response.read().decode('utf-8'))
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode('utf-8')
+        print(f"Supabase Error {e.code}: {error_body}")
+        return None
+
 
 class ScoreHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
@@ -54,11 +86,365 @@ class ScoreHandler(SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps(data, ensure_ascii=False, indent=2).encode('utf-8'))
             return
         
+        # API endpoint for backup (just creates backup)
+        if parsed_path.path == '/api/backup':
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json; charset=utf-8')
+            self.end_headers()
+            
+            result = self.backup_scores()
+            self.wfile.write(json.dumps(result, ensure_ascii=False).encode('utf-8'))
+            return
+        
+        # API endpoint for backup download (returns CSV file)
+        if parsed_path.path == '/api/backup-download':
+            csv_content, filename = self.get_backup_csv()
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'text/csv; charset=utf-8')
+            self.send_header('Content-Disposition', f'attachment; filename="{filename}"')
+            self.end_headers()
+            
+            self.wfile.write(csv_content.encode('utf-8-sig'))
+            return
+        
         # Serve static files normally
         return super().do_GET()
     
+    def do_POST(self):
+        parsed_path = urlparse(self.path)
+        content_length = int(self.headers.get('Content-Length', 0))
+        post_data = self.rfile.read(content_length).decode('utf-8')
+        
+        # Update a score
+        if parsed_path.path == '/api/update-score':
+            try:
+                data = json.loads(post_data)
+                result = self.update_score(data)
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps(result, ensure_ascii=False).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": str(e)}, ensure_ascii=False).encode('utf-8'))
+            return
+        
+        # Delete a rater's score for an employee
+        if parsed_path.path == '/api/delete-score':
+            try:
+                data = json.loads(post_data)
+                result = self.delete_score(data)
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps(result, ensure_ascii=False).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": str(e)}, ensure_ascii=False).encode('utf-8'))
+            return
+        
+        # Restore a score to original values
+        if parsed_path.path == '/api/restore-score':
+            try:
+                data = json.loads(post_data)
+                result = self.restore_score(data)
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps(result, ensure_ascii=False).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": str(e)}, ensure_ascii=False).encode('utf-8'))
+            return
+        
+        # Restore ALL modified scores
+        if parsed_path.path == '/api/restore-all':
+            try:
+                result = self.restore_all_scores()
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps(result, ensure_ascii=False).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": str(e)}, ensure_ascii=False).encode('utf-8'))
+            return
+        
+        self.send_response(404)
+        self.end_headers()
+    
+    def backup_scores(self):
+        """Create a timestamped backup of score.csv"""
+        import shutil
+        from datetime import datetime
+        
+        input_file = os.path.join(BASE_DIR, 'score.csv')
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        backup_dir = os.path.join(BASE_DIR, 'backups')
+        
+        # Create backup directory if not exists
+        os.makedirs(backup_dir, exist_ok=True)
+        
+        backup_file = os.path.join(backup_dir, f'score_backup_{timestamp}.csv')
+        shutil.copy2(input_file, backup_file)
+        
+        return {
+            "success": True,
+            "message": f"備份成功",
+            "filename": f"score_backup_{timestamp}.csv",
+            "timestamp": timestamp
+        }
+    
+    def get_backup_csv(self):
+        """Generate CSV content from Supabase for download"""
+        from datetime import datetime
+        import io
+        
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"score_backup_{timestamp}.csv"
+        
+        if USE_SUPABASE:
+            # Fetch all scores from Supabase
+            result = supabase_request('scores?select=*&order=ratee,rater')
+            
+            if result:
+                output = io.StringIO()
+                writer = csv.writer(output)
+                
+                # Write header
+                writer.writerow(['建立時間', '評分者', '受評者', '第一大類（共40分）', '第二大類（共30分）', '第三大類（共30分）', '總分'])
+                
+                # Write data
+                for row in result:
+                    writer.writerow([
+                        row.get('created_at', ''),
+                        row.get('rater', ''),
+                        row.get('ratee', ''),
+                        row.get('cat1', 0),
+                        row.get('cat2', 0),
+                        row.get('cat3', 0),
+                        row.get('total', 0)
+                    ])
+                
+                return output.getvalue(), filename
+        
+        return '', filename
+    
+    def restore_all_scores(self):
+        """Restore ALL modified scores to their original values"""
+        if USE_SUPABASE:
+            # First, find all modified scores
+            result = supabase_request('scores?select=id,ratee,rater,cat1,cat2,cat3,original_cat1,original_cat2,original_cat3')
+            
+            if result:
+                modified = []
+                for r in result:
+                    if r.get('original_cat1') is not None:
+                        if (r['cat1'] != r['original_cat1'] or 
+                            r['cat2'] != r['original_cat2'] or 
+                            r['cat3'] != r['original_cat3']):
+                            modified.append(r)
+                
+                if not modified:
+                    return {"success": True, "message": "沒有需要還原的修改", "count": 0}
+                
+                # Restore each modified score
+                restored_count = 0
+                for m in modified:
+                    import urllib.parse
+                    score_id = m['id']
+                    
+                    update_data = {
+                        'cat1': m['original_cat1'],
+                        'cat2': m['original_cat2'],
+                        'cat3': m['original_cat3']
+                    }
+                    
+                    url = f"{SUPABASE_URL}/rest/v1/scores?id=eq.{score_id}"
+                    headers = {
+                        'apikey': SUPABASE_SERVICE_KEY,
+                        'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=representation'
+                    }
+                    
+                    req_data = json.dumps(update_data).encode('utf-8')
+                    req = urllib.request.Request(url, data=req_data, headers=headers, method='PATCH')
+                    
+                    try:
+                        with urllib.request.urlopen(req) as response:
+                            restored_count += 1
+                    except:
+                        pass
+                
+                return {"success": True, "message": "還原成功", "count": restored_count}
+            
+            return {"success": False, "error": "無法讀取資料"}
+        else:
+            return {"success": False, "error": "CSV 模式已停用"}
+    
+    def update_score(self, data):
+        """Update a specific score in Supabase"""
+        ratee = data.get('ratee', '').strip()
+        rater = data.get('rater', '').strip()
+        cat1 = data.get('cat1')
+        cat2 = data.get('cat2')
+        cat3 = data.get('cat3')
+        
+        if USE_SUPABASE:
+            # Build update data
+            update_data = {}
+            if cat1 is not None:
+                update_data['cat1'] = int(cat1)
+            if cat2 is not None:
+                update_data['cat2'] = int(cat2)
+            if cat3 is not None:
+                update_data['cat3'] = int(cat3)
+            
+            # URL encode the filter parameters
+            import urllib.parse
+            ratee_encoded = urllib.parse.quote(ratee)
+            rater_encoded = urllib.parse.quote(rater)
+            
+            # Make PATCH request to Supabase
+            url = f"{SUPABASE_URL}/rest/v1/scores?ratee=eq.{ratee_encoded}&rater=eq.{rater_encoded}"
+            headers = {
+                'apikey': SUPABASE_SERVICE_KEY,
+                'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
+                'Content-Type': 'application/json',
+                'Prefer': 'return=representation'
+            }
+            
+            req_data = json.dumps(update_data).encode('utf-8')
+            req = urllib.request.Request(url, data=req_data, headers=headers, method='PATCH')
+            
+            try:
+                with urllib.request.urlopen(req) as response:
+                    result = json.loads(response.read().decode('utf-8'))
+                    if result and len(result) > 0:
+                        return {"success": True, "message": "更新成功"}
+                    else:
+                        return {"success": False, "error": f"找不到該評分記錄 (受評者:{ratee}, 評分者:{rater})"}
+            except urllib.error.HTTPError as e:
+                error_body = e.read().decode('utf-8')
+                return {"success": False, "error": f"Supabase 錯誤: {error_body}"}
+        else:
+            # Fallback to CSV (original code)
+            return {"success": False, "error": "CSV 模式已停用"}
+    
+    def delete_score(self, data):
+        """Delete a specific score entry from Supabase"""
+        ratee = data.get('ratee', '').strip()
+        rater = data.get('rater', '').strip()
+        
+        if USE_SUPABASE:
+            import urllib.parse
+            ratee_encoded = urllib.parse.quote(ratee)
+            rater_encoded = urllib.parse.quote(rater)
+            
+            # Make DELETE request to Supabase
+            url = f"{SUPABASE_URL}/rest/v1/scores?ratee=eq.{ratee_encoded}&rater=eq.{rater_encoded}"
+            headers = {
+                'apikey': SUPABASE_SERVICE_KEY,
+                'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
+                'Content-Type': 'application/json',
+                'Prefer': 'return=representation'
+            }
+            
+            req = urllib.request.Request(url, headers=headers, method='DELETE')
+            
+            try:
+                with urllib.request.urlopen(req) as response:
+                    result = json.loads(response.read().decode('utf-8'))
+                    if result and len(result) > 0:
+                        return {"success": True, "message": f"已刪除 {rater} 對 {ratee} 的評分"}
+                    else:
+                        return {"success": False, "error": f"找不到該評分記錄 (受評者:{ratee}, 評分者:{rater})"}
+            except urllib.error.HTTPError as e:
+                error_body = e.read().decode('utf-8')
+                return {"success": False, "error": f"Supabase 錯誤: {error_body}"}
+        else:
+            return {"success": False, "error": "CSV 模式已停用"}
+    
+    def restore_score(self, data):
+        """Restore a score to its original values"""
+        ratee = data.get('ratee', '').strip()
+        rater = data.get('rater', '').strip()
+        
+        if USE_SUPABASE:
+            import urllib.parse
+            ratee_encoded = urllib.parse.quote(ratee)
+            rater_encoded = urllib.parse.quote(rater)
+            
+            # First, get the original values
+            url = f"{SUPABASE_URL}/rest/v1/scores?ratee=eq.{ratee_encoded}&rater=eq.{rater_encoded}&select=original_cat1,original_cat2,original_cat3"
+            headers = {
+                'apikey': SUPABASE_SERVICE_KEY,
+                'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
+                'Content-Type': 'application/json'
+            }
+            
+            req = urllib.request.Request(url, headers=headers, method='GET')
+            
+            try:
+                with urllib.request.urlopen(req) as response:
+                    result = json.loads(response.read().decode('utf-8'))
+                    if result and len(result) > 0:
+                        original = result[0]
+                        original_cat1 = original.get('original_cat1')
+                        original_cat2 = original.get('original_cat2')
+                        original_cat3 = original.get('original_cat3')
+                        
+                        if original_cat1 is None:
+                            return {"success": False, "error": "沒有原始分數記錄"}
+                        
+                        # Update to original values
+                        update_data = {
+                            'cat1': original_cat1,
+                            'cat2': original_cat2,
+                            'cat3': original_cat3
+                        }
+                        
+                        patch_url = f"{SUPABASE_URL}/rest/v1/scores?ratee=eq.{ratee_encoded}&rater=eq.{rater_encoded}"
+                        patch_headers = {
+                            'apikey': SUPABASE_SERVICE_KEY,
+                            'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
+                            'Content-Type': 'application/json',
+                            'Prefer': 'return=representation'
+                        }
+                        
+                        patch_data = json.dumps(update_data).encode('utf-8')
+                        patch_req = urllib.request.Request(patch_url, data=patch_data, headers=patch_headers, method='PATCH')
+                        
+                        with urllib.request.urlopen(patch_req) as patch_response:
+                            return {
+                                "success": True, 
+                                "message": "已還原為原始分數",
+                                "original": {
+                                    "cat1": original_cat1,
+                                    "cat2": original_cat2,
+                                    "cat3": original_cat3
+                                }
+                            }
+                    else:
+                        return {"success": False, "error": f"找不到該評分記錄"}
+            except urllib.error.HTTPError as e:
+                error_body = e.read().decode('utf-8')
+                return {"success": False, "error": f"Supabase 錯誤: {error_body}"}
+        else:
+            return {"success": False, "error": "CSV 模式已停用"}
+    
     def process_scores(self):
-        """Process score.csv and return structured data."""
+        """Process scores and return structured data."""
         input_file = os.path.join(BASE_DIR, 'score.csv')
         staff_file = os.path.join(BASE_DIR, '工作人員名冊.csv')
         
@@ -66,45 +452,90 @@ class ScoreHandler(SimpleHTTPRequestHandler):
         employee_raters = defaultdict(list)
         rater_given_scores = defaultdict(list)  # Track scores GIVEN BY each rater
         
-        # Read scores
-        try:
-            with open(input_file, mode='r', encoding='utf-8') as csvfile:
-                reader = csv.DictReader(csvfile)
-                reader.fieldnames = [name.strip() for name in reader.fieldnames]
-                
-                for row in reader:
-                    ratee = row.get('受評者', '').strip()
-                    total_score_str = row.get('總分', '').strip()
-                    rater = row.get('評分者', '').strip()
+        # Read scores from Supabase or CSV
+        if USE_SUPABASE:
+            # Fetch all scores from Supabase
+            result = supabase_request('scores?select=*')
+            if result:
+                for row in result:
+                    ratee = row.get('ratee', '').strip()
+                    rater = row.get('rater', '').strip()
+                    cat1 = float(row.get('cat1', 0) or 0)
+                    cat2 = float(row.get('cat2', 0) or 0)
+                    cat3 = float(row.get('cat3', 0) or 0)
+                    total = row.get('total', cat1 + cat2 + cat3)
                     
-                    cat1 = row.get('第一大類（共40分）', '0').strip()
-                    cat2 = row.get('第二大類（共30分）', '0').strip()
-                    cat3 = row.get('第三大類（共30分）', '0').strip()
+                    # Get original scores
+                    original_cat1 = row.get('original_cat1')
+                    original_cat2 = row.get('original_cat2')
+                    original_cat3 = row.get('original_cat3')
                     
-                    if ratee and total_score_str:
-                        try:
-                            score = float(total_score_str)
-                            employee_scores[ratee].append(score)
-                            employee_raters[ratee].append({
-                                "name": rater,
-                                "total": score,
-                                "cat1": float(cat1) if cat1 else 0,
-                                "cat2": float(cat2) if cat2 else 0,
-                                "cat3": float(cat3) if cat3 else 0
+                    # Check if modified
+                    is_modified = (
+                        original_cat1 is not None and 
+                        (cat1 != original_cat1 or cat2 != original_cat2 or cat3 != original_cat3)
+                    )
+                    
+                    if ratee:
+                        employee_scores[ratee].append(total)
+                        employee_raters[ratee].append({
+                            "name": rater,
+                            "total": total,
+                            "cat1": cat1,
+                            "cat2": cat2,
+                            "cat3": cat3,
+                            "original_cat1": original_cat1,
+                            "original_cat2": original_cat2,
+                            "original_cat3": original_cat3,
+                            "is_modified": is_modified
+                        })
+                        if rater:
+                            rater_given_scores[rater].append({
+                                "ratee": ratee,
+                                "total": total,
+                                "cat1": cat1,
+                                "cat2": cat2,
+                                "cat3": cat3
                             })
-                            # Also track scores given BY this rater
-                            if rater:
-                                rater_given_scores[rater].append({
-                                    "ratee": ratee,
+        else:
+            # Fallback to CSV
+            try:
+                with open(input_file, mode='r', encoding='utf-8-sig') as csvfile:
+                    reader = csv.DictReader(csvfile)
+                    reader.fieldnames = [name.strip() for name in reader.fieldnames]
+                    
+                    for row in reader:
+                        ratee = row.get('受評者', '').strip()
+                        total_score_str = row.get('總分', '').strip()
+                        rater = row.get('評分者', '').strip()
+                        
+                        cat1 = row.get('第一大類（共40分）', '0').strip()
+                        cat2 = row.get('第二大類（共30分）', '0').strip()
+                        cat3 = row.get('第三大類（共30分）', '0').strip()
+                        
+                        if ratee and total_score_str:
+                            try:
+                                score = float(total_score_str)
+                                employee_scores[ratee].append(score)
+                                employee_raters[ratee].append({
+                                    "name": rater,
                                     "total": score,
                                     "cat1": float(cat1) if cat1 else 0,
                                     "cat2": float(cat2) if cat2 else 0,
                                     "cat3": float(cat3) if cat3 else 0
                                 })
-                        except ValueError:
-                            continue
-        except FileNotFoundError:
-            return {"error": "score.csv not found"}
+                                if rater:
+                                    rater_given_scores[rater].append({
+                                        "ratee": ratee,
+                                        "total": score,
+                                        "cat1": float(cat1) if cat1 else 0,
+                                        "cat2": float(cat2) if cat2 else 0,
+                                        "cat3": float(cat3) if cat3 else 0
+                                    })
+                            except ValueError:
+                                continue
+            except FileNotFoundError:
+                return {"error": "score.csv not found"}
         
         # Load staff metadata
         staff_meta = {}
@@ -633,50 +1064,106 @@ class ScoreHandler(SimpleHTTPRequestHandler):
         
         nodes = {}
         edges = []
+        score_map = {}  # Store scores for mutual detection
         
-        try:
-            with open(input_file, mode='r', encoding='utf-8') as csvfile:
-                reader = csv.DictReader(csvfile)
-                reader.fieldnames = [name.strip() for name in reader.fieldnames]
-                
-                for row in reader:
-                    rater = row.get('評分者', '').strip()
-                    ratee = row.get('受評者', '').strip()
-                    total_str = row.get('總分', '').strip()
+        # First pass: collect all scores
+        if USE_SUPABASE:
+            result = supabase_request('scores?select=rater,ratee,total')
+            if result:
+                for row in result:
+                    rater = row.get('rater', '').strip()
+                    ratee = row.get('ratee', '').strip()
+                    total = row.get('total', 0)
                     
-                    if rater and ratee and total_str:
-                        try:
-                            total = float(total_str)
-                            
-                            # Add nodes
-                            if rater not in nodes:
-                                nodes[rater] = {
-                                    "id": rater,
-                                    "label": rater,
-                                    "org": staff_org.get(rater, '未分類')
-                                }
-                            if ratee not in nodes:
-                                nodes[ratee] = {
-                                    "id": ratee,
-                                    "label": ratee,
-                                    "org": staff_org.get(ratee, '未分類')
-                                }
-                            
-                            # Add edge
-                            edges.append({
-                                "from": rater,
-                                "to": ratee,
-                                "score": total,
-                                "label": str(int(total))
-                            })
-                        except ValueError:
-                            continue
-        except FileNotFoundError:
-            return {"error": "score.csv not found"}
+                    if rater and ratee:
+                        # Store score in map
+                        score_map[(rater, ratee)] = total
+                        
+                        # Add nodes
+                        if rater not in nodes:
+                            nodes[rater] = {
+                                "id": rater,
+                                "label": rater,
+                                "org": staff_org.get(rater, '未分類')
+                            }
+                        if ratee not in nodes:
+                            nodes[ratee] = {
+                                "id": ratee,
+                                "label": ratee,
+                                "org": staff_org.get(ratee, '未分類')
+                            }
+        else:
+            try:
+                with open(input_file, mode='r', encoding='utf-8-sig') as csvfile:
+                    reader = csv.DictReader(csvfile)
+                    reader.fieldnames = [name.strip() for name in reader.fieldnames]
+                    
+                    for row in reader:
+                        rater = row.get('評分者', '').strip()
+                        ratee = row.get('受評者', '').strip()
+                        total_str = row.get('總分', '').strip()
+                        
+                        if rater and ratee and total_str:
+                            try:
+                                total = float(total_str)
+                                score_map[(rater, ratee)] = total
+                                
+                                if rater not in nodes:
+                                    nodes[rater] = {
+                                        "id": rater,
+                                        "label": rater,
+                                        "org": staff_org.get(rater, '未分類')
+                                    }
+                                if ratee not in nodes:
+                                    nodes[ratee] = {
+                                        "id": ratee,
+                                        "label": ratee,
+                                        "org": staff_org.get(ratee, '未分類')
+                                    }
+                            except ValueError:
+                                continue
+            except FileNotFoundError:
+                return {"error": "score.csv not found"}
+        
+        # Second pass: create edges and detect mutual high scores
+        mutual_high = []  # Pairs where both gave each other 85+ scores
+        HIGH_SCORE_THRESHOLD = 85
+        
+        for (rater, ratee), score in score_map.items():
+            # Check if there's a reverse rating
+            reverse_score = score_map.get((ratee, rater))
+            is_mutual_high = (
+                reverse_score is not None and 
+                score >= HIGH_SCORE_THRESHOLD and 
+                reverse_score >= HIGH_SCORE_THRESHOLD
+            )
+            
+            edges.append({
+                "from": rater,
+                "to": ratee,
+                "score": score,
+                "label": str(int(score)),
+                "is_mutual_high": is_mutual_high
+            })
+            
+            # Track mutual high pairs (each pair once)
+            if is_mutual_high and rater < ratee:
+                mutual_high.append({
+                    "person1": rater,
+                    "person2": ratee,
+                    "score1to2": score,
+                    "score2to1": reverse_score,
+                    "avg": (score + reverse_score) / 2
+                })
+        
+        # Sort mutual high by average score descending
+        mutual_high.sort(key=lambda x: x['avg'], reverse=True)
         
         return {
             "nodes": list(nodes.values()),
-            "edges": edges
+            "edges": edges,
+            "mutual_high": mutual_high,
+            "high_threshold": HIGH_SCORE_THRESHOLD
         }
 
 def run_server():

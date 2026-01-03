@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>評分者分析 - 員工考核系統</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Outfit:wght@400;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #6366f1;
+            --primary-dark: #4f46e5;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --bg-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --card-bg: #ffffff;
+            --font-display: 'Outfit', sans-serif;
+            --font-body: 'Noto Sans TC', sans-serif;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-body);
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: var(--bg-gradient);
+            color: white;
+            padding: 2rem;
+            border-radius: 1rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 10px 40px rgba(102, 126, 234, 0.3);
+        }
+
+        header h1 {
+            font-family: var(--font-display);
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        header p {
+            opacity: 0.9;
+        }
+
+        .nav-links {
+            margin-top: 1rem;
+        }
+
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 0.5rem;
+            margin-right: 0.5rem;
+            transition: background 0.3s;
+        }
+
+        .nav-links a:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .chart-container {
+            background: var(--card-bg);
+            border-radius: 1rem;
+            padding: 2rem;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            margin-bottom: 2rem;
+        }
+
+        .chart-title {
+            font-family: var(--font-display);
+            font-size: 1.5rem;
+            color: var(--text-primary);
+            margin-bottom: 1.5rem;
+        }
+
+        .bar-chart {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .bar-row {
+            display: grid;
+            grid-template-columns: 100px 1fr 60px;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .bar-label {
+            font-weight: 600;
+            color: var(--text-primary);
+            text-align: right;
+        }
+
+        .bar-wrapper {
+            display: flex;
+            gap: 4px;
+            height: 24px;
+        }
+
+        .bar-segment {
+            height: 100%;
+            border-radius: 4px;
+            position: relative;
+            transition: transform 0.2s;
+        }
+
+        .bar-segment:hover {
+            transform: scaleY(1.1);
+        }
+
+        .bar-cat1 {
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .bar-cat2 {
+            background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+        }
+
+        .bar-cat3 {
+            background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
+        }
+
+        .bar-total {
+            font-weight: 700;
+            color: var(--text-primary);
+            font-family: var(--font-display);
+        }
+
+        .legend {
+            display: flex;
+            gap: 2rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+
+        .sort-controls {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .sort-btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 0.5rem;
+            background: #e2e8f0;
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .sort-btn.active {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .sort-btn:hover {
+            background: var(--primary-dark);
+            color: white;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1rem;
+        }
+
+        .stat-card {
+            background: var(--card-bg);
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            border-left: 4px solid var(--primary-color);
+        }
+
+        .stat-name {
+            font-weight: 700;
+            font-size: 1.1rem;
+            color: var(--text-primary);
+            margin-bottom: 0.75rem;
+        }
+
+        .stat-details {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 0.5rem;
+            background: #f8fafc;
+            border-radius: 0.375rem;
+        }
+
+        .stat-label {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.25rem;
+        }
+
+        .stat-value {
+            font-weight: 700;
+            font-family: var(--font-display);
+            color: var(--primary-color);
+        }
+
+        .stat-count {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 0.5rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fa-solid fa-chart-bar"></i> 評分者分析</h1>
+            <p>分析每位同仁平均給他人的三大類分數</p>
+            <div class="nav-links">
+                <a href="index.html"><i class="fa-solid fa-arrow-left"></i> 返回考核總覽</a>
+            </div>
+        </header>
+
+        <div class="chart-container">
+            <h2 class="chart-title">評分傾向比較圖</h2>
+
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color bar-cat1"></div>
+                    <span>第一大類 (滿分40)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color bar-cat2"></div>
+                    <span>第二大類 (滿分30)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color bar-cat3"></div>
+                    <span>第三大類 (滿分30)</span>
+                </div>
+            </div>
+
+            <div class="sort-controls">
+                <button class="sort-btn active" data-sort="name">依姓名</button>
+                <button class="sort-btn" data-sort="total">依總分</button>
+                <button class="sort-btn" data-sort="cat1">依第一大類</button>
+                <button class="sort-btn" data-sort="cat2">依第二大類</button>
+                <button class="sort-btn" data-sort="cat3">依第三大類</button>
+            </div>
+
+            <div id="barChart" class="bar-chart"></div>
+        </div>
+
+        <div class="chart-container">
+            <h2 class="chart-title"><i class="fa-solid fa-building"></i> 各機構評分傾向比較</h2>
+            <div id="orgChart" class="bar-chart"></div>
+        </div>
+
+        <div class="chart-container">
+            <h2 class="chart-title">詳細數據</h2>
+            <div id="statsGrid" class="stats-grid"></div>
+        </div>
+    </div>
+
+    <script src="rater-data.js"></script>
+    <script>
+        let raterData = [];
+        let orgData = [];
+        let currentSort = 'name';
+
+        async function loadData() {
+            try {
+                // Try static data first, then fallback to API
+                let data;
+                if (typeof RATER_STATS_DATA !== 'undefined') {
+                    data = RATER_STATS_DATA;
+                } else {
+                    const response = await fetch('/api/rater-stats');
+                    data = await response.json();
+                }
+                raterData = data.raters || [];
+                orgData = data.orgs || [];
+                renderChart();
+                renderOrgChart();
+                renderGrid();
+            } catch (err) {
+                console.error('Failed to load data:', err);
+            }
+        }
+
+        function sortData(data, sortBy) {
+            const sorted = [...data];
+            switch (sortBy) {
+                case 'total':
+                    sorted.sort((a, b) => b.avg_total - a.avg_total);
+                    break;
+                case 'cat1':
+                    sorted.sort((a, b) => b.avg_cat1 - a.avg_cat1);
+                    break;
+                case 'cat2':
+                    sorted.sort((a, b) => b.avg_cat2 - a.avg_cat2);
+                    break;
+                case 'cat3':
+                    sorted.sort((a, b) => b.avg_cat3 - a.avg_cat3);
+                    break;
+                default:
+                    sorted.sort((a, b) => a.name.localeCompare(b.name, 'zh-TW'));
+            }
+            return sorted;
+        }
+
+        function renderChart() {
+            const container = document.getElementById('barChart');
+            const sorted = sortData(raterData, currentSort);
+
+            // Scale: cat1 max 40, cat2 max 30, cat3 max 30, total max 100
+            const maxTotal = 100;
+
+            container.innerHTML = sorted.map(r => `
+                <div class="bar-row">
+                    <div class="bar-label">${r.name}</div>
+                    <div class="bar-wrapper">
+                        <div class="bar-segment bar-cat1" 
+                             style="width: ${(r.avg_cat1 / maxTotal) * 100}%" 
+                             title="第一大類: ${r.avg_cat1}"></div>
+                        <div class="bar-segment bar-cat2" 
+                             style="width: ${(r.avg_cat2 / maxTotal) * 100}%" 
+                             title="第二大類: ${r.avg_cat2}"></div>
+                        <div class="bar-segment bar-cat3" 
+                             style="width: ${(r.avg_cat3 / maxTotal) * 100}%" 
+                             title="第三大類: ${r.avg_cat3}"></div>
+                    </div>
+                    <div class="bar-total">${r.avg_total}</div>
+                </div>
+            `).join('');
+        }
+
+        function renderOrgChart() {
+            const container = document.getElementById('orgChart');
+            const sorted = [...orgData].sort((a, b) => b.avg_total - a.avg_total);
+            const maxTotal = 100;
+
+            container.innerHTML = sorted.map(org => `
+                <div class="bar-row" style="height: 40px;">
+                    <div class="bar-label" style="font-size: 1.1rem;">${org.name}</div>
+                    <div class="bar-wrapper" style="height: 32px;">
+                        <div class="bar-segment bar-cat1" 
+                             style="width: ${(org.avg_cat1 / maxTotal) * 100}%" 
+                             title="第一大類: ${org.avg_cat1}"></div>
+                        <div class="bar-segment bar-cat2" 
+                             style="width: ${(org.avg_cat2 / maxTotal) * 100}%" 
+                             title="第二大類: ${org.avg_cat2}"></div>
+                        <div class="bar-segment bar-cat3" 
+                             style="width: ${(org.avg_cat3 / maxTotal) * 100}%" 
+                             title="第三大類: ${org.avg_cat3}"></div>
+                    </div>
+                    <div class="bar-total" style="font-size: 1.2rem;">${org.avg_total}</div>
+                </div>
+            `).join('') + `
+                <div style="margin-top: 1rem; padding: 1rem; background: #f8fafc; border-radius: 0.5rem;">
+                    ${sorted.map(org => `
+                        <span style="margin-right: 2rem;">
+                            <strong>${org.name}</strong>: 
+                            第一類 ${org.avg_cat1} / 第二類 ${org.avg_cat2} / 第三類 ${org.avg_cat3} 
+                            (${org.count}人評分)
+                        </span>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        function renderGrid() {
+            const container = document.getElementById('statsGrid');
+            const sorted = sortData(raterData, currentSort);
+
+            container.innerHTML = sorted.map(r => `
+                <div class="stat-card">
+                    <div class="stat-name">${r.name} <span style="font-size: 0.8rem; color: #64748b; font-weight: normal;">${r.org || ''}</span></div>
+                    <div class="stat-details">
+                        <div class="stat-item">
+                            <div class="stat-label">第一大類</div>
+                            <div class="stat-value">${r.avg_cat1}</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">第二大類</div>
+                            <div class="stat-value">${r.avg_cat2}</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">第三大類</div>
+                            <div class="stat-value">${r.avg_cat3}</div>
+                        </div>
+                    </div>
+                    <div class="stat-count">
+                        <i class="fa-solid fa-user-pen"></i> 評分了 ${r.count} 人，平均給分 ${r.avg_total}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Sort button handlers
+        document.querySelectorAll('.sort-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentSort = btn.dataset.sort;
+                renderChart();
+                renderGrid();
+            });
+        });
+
+        loadData();
+    </script>
+</body>
+
+</html>
