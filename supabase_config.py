@@ -1,0 +1,8 @@
+#!/usr/bin/env python3
+"""
+Supabase configuration for score server.
+"""
+
+SUPABASE_URL = "https://acrkclmderqewcwugsnl.supabase.co"
+SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFjcmtjbG1kZXJxZXdjd3Vnc25sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYyNTc0MzAsImV4cCI6MjA4MTgzMzQzMH0.placeholder"
+SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFjcmtjbG1kZXJxZXdjd3Vnc25sIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NjI1NzQzMCwiZXhwIjoyMDgxODMzNDMwfQ.ZCQl_0dsfPdkG43zQsF47lbbhA6ybiGLa2fw0zSKGzQ"

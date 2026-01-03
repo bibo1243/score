@@ -483,15 +483,31 @@ async function updateScore(inputEl) {
     inputEl.style.backgroundColor = '#fef3c7';
 
     try {
-        const response = await fetch('/api/update-score', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ratee, rater, cat1, cat2, cat3 })
-        });
+        let success = false;
 
-        const result = await response.json();
+        // Try local server first
+        try {
+            const response = await fetch('/api/update-score', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ratee, rater, cat1, cat2, cat3 })
+            });
+            const result = await response.json();
+            success = result.success;
+            if (!success) throw new Error(result.error || 'Server update failed');
+        } catch (serverErr) {
+            console.log('Local server not available, trying Supabase...', serverErr.message);
 
-        if (result.success) {
+            // Try Supabase directly (for GitHub Pages)
+            if (typeof updateScoreInSupabase === 'function') {
+                await updateScoreInSupabase(ratee, rater, cat1, cat2, cat3);
+                success = true;
+            } else {
+                throw serverErr;
+            }
+        }
+
+        if (success) {
             inputEl.style.backgroundColor = '#d1fae5';
 
             // Reload data to update summary scores
@@ -500,12 +516,10 @@ async function updateScore(inputEl) {
             setTimeout(() => {
                 inputEl.style.backgroundColor = '';
             }, 500);
-        } else {
-            alert('更新失敗：' + result.error);
-            inputEl.style.backgroundColor = '#fee2e2';
         }
     } catch (err) {
         console.error('Update failed:', err);
+        alert('更新失敗：' + err.message);
         inputEl.style.backgroundColor = '#fee2e2';
     }
 }
@@ -622,15 +636,31 @@ async function deleteScore(ratee, rater) {
     }
 
     try {
-        const response = await fetch('/api/delete-score', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ratee, rater })
-        });
+        let success = false;
 
-        const result = await response.json();
+        // Try local server first
+        try {
+            const response = await fetch('/api/delete-score', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ratee, rater })
+            });
+            const result = await response.json();
+            success = result.success;
+            if (!success) throw new Error(result.error || 'Delete failed');
+        } catch (serverErr) {
+            console.log('Local server not available, trying Supabase...', serverErr.message);
 
-        if (result.success) {
+            // Try Supabase directly (for GitHub Pages)
+            if (typeof deleteScoreInSupabase === 'function') {
+                await deleteScoreInSupabase(ratee, rater);
+                success = true;
+            } else {
+                throw serverErr;
+            }
+        }
+
+        if (success) {
             // Remove the rater card from DOM
             const raterCards = document.querySelectorAll('.rater-card');
             raterCards.forEach(card => {
@@ -655,44 +685,51 @@ async function deleteScore(ratee, rater) {
 
             // Refresh employee data to update scores
             await refreshEmployeeData();
-
-        } else {
-            alert('刪除失敗：' + result.error);
         }
     } catch (err) {
         console.error('Delete failed:', err);
-        alert('刪除失敗');
+        alert('刪除失敗：' + err.message);
     }
 }
 
 // Global function to backup all scores (download as CSV)
 async function backupScores() {
     try {
-        const response = await fetch('/api/backup-download');
+        // Try local server first
+        try {
+            const response = await fetch('/api/backup-download');
+            if (response.ok) {
+                const blob = await response.blob();
+                const filename = response.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1]
+                    || `score_backup_${new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '')}.csv`;
 
-        if (response.ok) {
-            const blob = await response.blob();
-            const filename = response.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1]
-                || `score_backup_${new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '')}.csv`;
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
 
-            // Create download link
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
+                alert('備份下載成功！');
+                return;
+            }
+            throw new Error('Server backup failed');
+        } catch (serverErr) {
+            console.log('Local server not available, trying Supabase...', serverErr.message);
 
-            alert('備份下載成功！');
-        } else {
-            const result = await response.json();
-            alert('備份失敗：' + result.error);
+            // Try Supabase directly (for GitHub Pages)
+            if (typeof exportBackupCSV === 'function') {
+                await exportBackupCSV();
+                alert('備份下載成功！');
+                return;
+            }
+            throw serverErr;
         }
     } catch (err) {
         console.error('Backup failed:', err);
-        alert('備份失敗');
+        alert('備份失敗：' + err.message);
     }
 }
 
@@ -703,26 +740,39 @@ async function restoreAllScores() {
     }
 
     try {
-        const response = await fetch('/api/restore-all', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
+        let result;
 
-        const result = await response.json();
+        // Try local server first
+        try {
+            const response = await fetch('/api/restore-all', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            result = await response.json();
+        } catch (serverErr) {
+            console.log('Local server not available, trying Supabase...', serverErr.message);
+
+            // Try Supabase directly (for GitHub Pages)
+            if (typeof restoreAllScoresInSupabase === 'function') {
+                result = await restoreAllScoresInSupabase();
+            } else {
+                throw serverErr;
+            }
+        }
 
         if (result.success) {
             if (result.count > 0) {
-                alert(`${result.message}\n還原了 ${result.count} 筆評分`);
+                alert(`還原成功！\n還原了 ${result.count} 筆評分`);
                 location.reload();
             } else {
                 alert('目前沒有需要還原的修改記錄');
             }
         } else {
-            alert('還原失敗：' + result.error);
+            alert('還原失敗：' + (result.error || '未知錯誤'));
         }
     } catch (err) {
         console.error('Restore all failed:', err);
-        alert('還原失敗');
+        alert('還原失敗：' + err.message);
     }
 }
 
