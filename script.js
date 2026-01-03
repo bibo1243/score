@@ -806,52 +806,43 @@ async function restoreScore(ratee, rater) {
     }
 
     try {
-        const response = await fetch('/api/restore-score', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ratee, rater })
-        });
+        let result;
 
-        const result = await response.json();
-
-        if (result.success) {
-            // Update the input fields with original values
-            const raterCards = document.querySelectorAll('.rater-card');
-            raterCards.forEach(card => {
-                if (card.dataset.ratee === ratee && card.dataset.rater === rater) {
-                    const cat1Input = card.querySelector('input[data-field="cat1"]');
-                    const cat2Input = card.querySelector('input[data-field="cat2"]');
-                    const cat3Input = card.querySelector('input[data-field="cat3"]');
-                    const totalEl = card.querySelector('.total-val');
-
-                    if (cat1Input) cat1Input.value = result.original.cat1;
-                    if (cat2Input) cat2Input.value = result.original.cat2;
-                    if (cat3Input) cat3Input.value = result.original.cat3;
-
-                    const newTotal = result.original.cat1 + result.original.cat2 + result.original.cat3;
-                    if (totalEl) totalEl.textContent = newTotal;
-
-                    // Remove modified class and badge
-                    card.classList.remove('is-modified');
-                    const modifiedBadge = card.querySelector('.modified-badge');
-                    if (modifiedBadge) modifiedBadge.remove();
-                    const restoreBtn = card.querySelector('.restore-btn');
-                    if (restoreBtn) restoreBtn.remove();
-
-                    // Flash green to indicate success
-                    card.style.animation = 'flashGreen 0.5s ease';
-                    setTimeout(() => card.style.animation = '', 500);
-                }
+        // Try local server first
+        try {
+            const response = await fetch('/api/restore-score', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ratee, rater })
             });
 
-            // Refresh all data to update averages
-            await refreshEmployeeData();
+            if (!response.ok) throw new Error('Server not available');
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error('Server not available');
+            }
 
+            result = await response.json();
+        } catch (serverErr) {
+            console.log('Local server not available, trying Supabase...', serverErr.message);
+
+            // Try Supabase directly (for GitHub Pages)
+            if (typeof restoreScoreInSupabase === 'function') {
+                await restoreScoreInSupabase(ratee, rater);
+                result = { success: true };
+            } else {
+                throw serverErr;
+            }
+        }
+
+        if (result.success) {
+            // Refresh page to show updated data
+            location.reload();
         } else {
-            alert('還原失敗：' + result.error);
+            alert('還原失敗：' + (result.error || '未知錯誤'));
         }
     } catch (err) {
         console.error('Restore failed:', err);
-        alert('還原失敗');
+        alert('還原失敗：' + err.message);
     }
 }
