@@ -519,7 +519,10 @@ async function updateScore(inputEl) {
         if (success) {
             inputEl.style.backgroundColor = '#d1fae5';
 
-            // Reload data to update summary scores
+            // Immediately update the employee card summary scores
+            updateEmployeeCardSummary(ratee);
+
+            // Reload data to update global stats
             await refreshEmployeeData();
 
             setTimeout(() => {
@@ -530,6 +533,75 @@ async function updateScore(inputEl) {
         console.error('Update failed:', err);
         alert('更新失敗：' + err.message);
         inputEl.style.backgroundColor = '#fee2e2';
+    }
+}
+
+// Immediately update employee card summary scores based on current rater inputs
+function updateEmployeeCardSummary(ratee) {
+    // Find the employee card
+    const employeeCards = document.querySelectorAll('.employee-card');
+    let targetCard = null;
+    employeeCards.forEach(card => {
+        const nameEl = card.querySelector('h2');
+        if (nameEl && nameEl.textContent.trim() === ratee) {
+            targetCard = card;
+        }
+    });
+
+    if (!targetCard) return;
+
+    // Collect all rater scores for this employee
+    const raterCards = targetCard.querySelectorAll('.rater-card');
+    let cat1Sum = 0, cat2Sum = 0, cat3Sum = 0;
+    let raterCount = 0;
+
+    raterCards.forEach(raterCard => {
+        const cat1Input = raterCard.querySelector('input[data-field="cat1"]');
+        const cat2Input = raterCard.querySelector('input[data-field="cat2"]');
+        const cat3Input = raterCard.querySelector('input[data-field="cat3"]');
+
+        if (cat1Input && cat2Input && cat3Input) {
+            cat1Sum += parseFloat(cat1Input.value) || 0;
+            cat2Sum += parseFloat(cat2Input.value) || 0;
+            cat3Sum += parseFloat(cat3Input.value) || 0;
+            raterCount++;
+        }
+    });
+
+    if (raterCount === 0) return;
+
+    // Calculate averages
+    const cat1Avg = cat1Sum / raterCount;
+    const cat2Avg = cat2Sum / raterCount;
+    const cat3Avg = cat3Sum / raterCount;
+    const totalAvg = cat1Avg + cat2Avg + cat3Avg;
+
+    // Update the summary display (Area 3 - category averages)
+    const catSummaries = targetCard.querySelectorAll('.category-summary');
+    catSummaries.forEach((summary, index) => {
+        const valueEl = summary.querySelector('.cat-value');
+        const originalEl = summary.querySelector('.cat-original');
+
+        if (index === 0 && valueEl) {
+            valueEl.textContent = Math.round(cat1Avg);
+            if (originalEl) originalEl.textContent = `(${cat1Avg.toFixed(2)})`;
+        } else if (index === 1 && valueEl) {
+            valueEl.textContent = Math.round(cat2Avg);
+            if (originalEl) originalEl.textContent = `(${cat2Avg.toFixed(2)})`;
+        } else if (index === 2 && valueEl) {
+            valueEl.textContent = Math.round(cat3Avg);
+            if (originalEl) originalEl.textContent = `(${cat3Avg.toFixed(2)})`;
+        }
+    });
+
+    // Update the total score display (Area 4)
+    const scoreEl = targetCard.querySelector('.score-display');
+    if (scoreEl) {
+        scoreEl.textContent = totalAvg.toFixed(2);
+
+        // Add flash animation
+        scoreEl.style.animation = 'pulse 0.3s ease';
+        setTimeout(() => scoreEl.style.animation = '', 300);
     }
 }
 
