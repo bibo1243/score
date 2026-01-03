@@ -855,3 +855,4 @@ async function restoreScore(ratee, rater) {
         alert('還原失敗');
     }
 }
+// Cache bust 1767434273
