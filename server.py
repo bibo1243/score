@@ -108,6 +108,17 @@ class ScoreHandler(SimpleHTTPRequestHandler):
             self.wfile.write(csv_content.encode('utf-8-sig'))
             return
         
+        # API endpoint for deleted scores
+        if parsed_path.path == '/api/deleted-scores':
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json; charset=utf-8')
+            self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
+            self.end_headers()
+            
+            data = self.get_deleted_scores()
+            self.wfile.write(json.dumps(data, ensure_ascii=False, indent=2).encode('utf-8'))
+            return
+        
         # Serve static files normally
         return super().do_GET()
     
@@ -168,6 +179,38 @@ class ScoreHandler(SimpleHTTPRequestHandler):
         if parsed_path.path == '/api/restore-all':
             try:
                 result = self.restore_all_scores()
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps(result, ensure_ascii=False).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": str(e)}, ensure_ascii=False).encode('utf-8'))
+            return
+        
+        # Restore a deleted score
+        if parsed_path.path == '/api/restore-deleted':
+            try:
+                data = json.loads(post_data)
+                result = self.restore_deleted_score(data)
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps(result, ensure_ascii=False).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": str(e)}, ensure_ascii=False).encode('utf-8'))
+            return
+        
+        # Add a new score
+        if parsed_path.path == '/api/add-score':
+            try:
+                data = json.loads(post_data)
+                result = self.add_score(data)
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json; charset=utf-8')
                 self.end_headers()
@@ -342,16 +385,22 @@ class ScoreHandler(SimpleHTTPRequestHandler):
             return {"success": False, "error": "CSV 模式已停用"}
     
     def delete_score(self, data):
-        """Delete a specific score entry from Supabase"""
+        """Soft delete a specific score entry (set is_deleted=true)"""
         ratee = data.get('ratee', '').strip()
         rater = data.get('rater', '').strip()
         
         if USE_SUPABASE:
             import urllib.parse
+            from datetime import datetime
             ratee_encoded = urllib.parse.quote(ratee)
             rater_encoded = urllib.parse.quote(rater)
             
-            # Make DELETE request to Supabase
+            # Soft delete: set is_deleted=true and record deletion time
+            update_data = {
+                'is_deleted': True,
+                'deleted_at': datetime.now().isoformat()
+            }
+            
             url = f"{SUPABASE_URL}/rest/v1/scores?ratee=eq.{ratee_encoded}&rater=eq.{rater_encoded}"
             headers = {
                 'apikey': SUPABASE_SERVICE_KEY,
@@ -360,15 +409,134 @@ class ScoreHandler(SimpleHTTPRequestHandler):
                 'Prefer': 'return=representation'
             }
             
-            req = urllib.request.Request(url, headers=headers, method='DELETE')
+            req_data = json.dumps(update_data).encode('utf-8')
+            req = urllib.request.Request(url, data=req_data, headers=headers, method='PATCH')
             
             try:
                 with urllib.request.urlopen(req) as response:
                     result = json.loads(response.read().decode('utf-8'))
                     if result and len(result) > 0:
-                        return {"success": True, "message": f"已刪除 {rater} 對 {ratee} 的評分"}
+                        return {"success": True, "message": f"已刪除 {rater} 對 {ratee} 的評分（可還原）"}
                     else:
                         return {"success": False, "error": f"找不到該評分記錄 (受評者:{ratee}, 評分者:{rater})"}
+            except urllib.error.HTTPError as e:
+                error_body = e.read().decode('utf-8')
+                return {"success": False, "error": f"Supabase 錯誤: {error_body}"}
+        else:
+            return {"success": False, "error": "CSV 模式已停用"}
+    
+    def get_deleted_scores(self):
+        """Get all soft-deleted scores"""
+        if USE_SUPABASE:
+            result = supabase_request('scores?is_deleted=eq.true&select=*')
+            if result:
+                return {"success": True, "deleted": result}
+            return {"success": True, "deleted": []}
+        return {"success": False, "error": "CSV 模式已停用"}
+    
+    def restore_deleted_score(self, data):
+        """Restore a soft-deleted score"""
+        ratee = data.get('ratee', '').strip()
+        rater = data.get('rater', '').strip()
+        
+        if USE_SUPABASE:
+            import urllib.parse
+            ratee_encoded = urllib.parse.quote(ratee)
+            rater_encoded = urllib.parse.quote(rater)
+            
+            # Restore: set is_deleted=false
+            update_data = {
+                'is_deleted': False,
+                'deleted_at': None
+            }
+            
+            url = f"{SUPABASE_URL}/rest/v1/scores?ratee=eq.{ratee_encoded}&rater=eq.{rater_encoded}"
+            headers = {
+                'apikey': SUPABASE_SERVICE_KEY,
+                'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
+                'Content-Type': 'application/json',
+                'Prefer': 'return=representation'
+            }
+            
+            req_data = json.dumps(update_data).encode('utf-8')
+            req = urllib.request.Request(url, data=req_data, headers=headers, method='PATCH')
+            
+            try:
+                with urllib.request.urlopen(req) as response:
+                    result = json.loads(response.read().decode('utf-8'))
+                    if result and len(result) > 0:
+                        return {"success": True, "message": f"已還原 {rater} 對 {ratee} 的評分"}
+                    else:
+                        return {"success": False, "error": f"找不到該評分記錄"}
+            except urllib.error.HTTPError as e:
+                error_body = e.read().decode('utf-8')
+                return {"success": False, "error": f"Supabase 錯誤: {error_body}"}
+        else:
+            return {"success": False, "error": "CSV 模式已停用"}
+    
+    def add_score(self, data):
+        """Add a new score entry to Supabase"""
+        ratee = data.get('ratee', '').strip()
+        rater = data.get('rater', '').strip()
+        cat1 = int(data.get('cat1', 0))
+        cat2 = int(data.get('cat2', 0))
+        cat3 = int(data.get('cat3', 0))
+        is_manager = data.get('is_manager', False)  # Whether rater is a manager
+        
+        if not ratee or not rater:
+            return {"success": False, "error": "受評者和評分者不能為空"}
+        
+        if USE_SUPABASE:
+            from datetime import datetime
+            
+            # First check if this combination already exists
+            import urllib.parse
+            ratee_encoded = urllib.parse.quote(ratee)
+            rater_encoded = urllib.parse.quote(rater)
+            
+            check_url = f"{SUPABASE_URL}/rest/v1/scores?ratee=eq.{ratee_encoded}&rater=eq.{rater_encoded}&select=id"
+            headers = {
+                'apikey': SUPABASE_SERVICE_KEY,
+                'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
+                'Content-Type': 'application/json'
+            }
+            
+            try:
+                req = urllib.request.Request(check_url, headers=headers, method='GET')
+                with urllib.request.urlopen(req) as response:
+                    existing = json.loads(response.read().decode('utf-8'))
+                    if existing and len(existing) > 0:
+                        return {"success": False, "error": f"{rater} 對 {ratee} 的評分已存在，請使用編輯功能"}
+            except:
+                pass  # Continue with insert
+            
+            # Insert new score (only include columns that exist in the table)
+            # Note: 'total' is auto-generated, don't include it
+            new_score = {
+                'ratee': ratee,
+                'rater': rater,
+                'cat1': cat1,
+                'cat2': cat2,
+                'cat3': cat3,
+                'original_cat1': cat1,
+                'original_cat2': cat2,
+                'original_cat3': cat3
+            }
+            
+            url = f"{SUPABASE_URL}/rest/v1/scores"
+            headers['Prefer'] = 'return=representation'
+            
+            req_data = json.dumps(new_score).encode('utf-8')
+            req = urllib.request.Request(url, data=req_data, headers=headers, method='POST')
+            
+            try:
+                with urllib.request.urlopen(req) as response:
+                    result = json.loads(response.read().decode('utf-8'))
+                    if result:
+                        role_text = "主管" if is_manager else "平級"
+                        return {"success": True, "message": f"已新增 {rater}（{role_text}）對 {ratee} 的評分"}
+                    else:
+                        return {"success": False, "error": "新增失敗"}
             except urllib.error.HTTPError as e:
                 error_body = e.read().decode('utf-8')
                 return {"success": False, "error": f"Supabase 錯誤: {error_body}"}
@@ -454,8 +622,8 @@ class ScoreHandler(SimpleHTTPRequestHandler):
         
         # Read scores from Supabase or CSV
         if USE_SUPABASE:
-            # Fetch all scores from Supabase
-            result = supabase_request('scores?select=*')
+            # Fetch all scores from Supabase (exclude soft-deleted)
+            result = supabase_request('scores?select=*&or=(is_deleted.is.null,is_deleted.eq.false)')
             if result:
                 for row in result:
                     ratee = row.get('ratee', '').strip()
@@ -552,7 +720,13 @@ class ScoreHandler(SimpleHTTPRequestHandler):
         
         def normalize_classification(name, raw_org, raw_unit, raw_section):
             org, unit, section = raw_org, raw_unit, raw_section
-            if name == '熊小蓮': return '基金會', '行政組', section
+            
+            # Explicit mapping for Institution Heads
+            if name == '李冠葦' or name == '熊小蓮': return '基金會', '行政組', section
+            if name == '廖振杉': return '兒少之家', '教保組', section # Assuming unit/section, org is key
+            if name == '廖慧雯': return '少年家園', '教保組', section
+            if name == '楊顗帆': return '諮商所', unit, section
+            
             if name in ['陳柔安', '林彥秀']: return '諮商所', unit, section
             if unit in ['行政組', '社資組', '人資公關組', '圖書組', '會計室']: return '基金會', unit, section
             if org == '教保組' and unit == '兒少之家': return '兒少之家', '教保組', section
@@ -578,7 +752,15 @@ class ScoreHandler(SimpleHTTPRequestHandler):
                         raw_unit = row.get('所屬單位', '').strip()
                         raw_section = row.get('股別', '').strip()
                         final_org, final_unit, final_section = normalize_classification(name, raw_org, raw_unit, raw_section)
-                        staff_meta[name] = {"org": final_org, "unit": final_unit, "section": final_section}
+                        role = row.get('考核標準', '').strip()
+                        title = row.get('職稱', '').strip()
+                        staff_meta[name] = {
+                            "org": final_org, 
+                            "unit": final_unit, 
+                            "section": final_section,
+                            "role": role,
+                            "title": title
+                        }
         except FileNotFoundError:
             pass
         
@@ -667,12 +849,38 @@ class ScoreHandler(SimpleHTTPRequestHandler):
             
             meta = staff_meta.get(employee, {"org": "未分類", "unit": "", "section": ""})
             
-            # Missing raters
+            # Missing raters - separated from subordinates
             missing_raters = []
+            subordinates = []
+            
+            # Define manager -> subordinates relationships
+            MANAGER_SUBORDINATES = {
+                '李冠葦': {'陳淑錡', '林紀騰', '劉春燕', '林麗娟', '熊小蓮', '王元鼎', '王芊蓉', '陸廷瑋', '林港博', '謝秀桃', '徐銘澤', '羅如光'},
+                '陳淑錡': {'林紀騰', '劉春燕', '林麗娟', '熊小蓮', '王元鼎', '王芊蓉', '陸廷瑋', '林港博', '謝秀桃', '徐銘澤', '羅如光'},
+                '林紀騰': {'林港博', '謝秀桃', '徐銘澤', '羅如光'},
+                '高靜華': set(),
+                '廖振杉': {'陳宛妤', '簡采琦', '林東美', '賀郁茵', '廖玟慈', '張宜芳', '蕭婷予', '陳亮寧', '王卉蓁', '許芸嘉', '李炎輝', '曾婷婷'},
+                '陳宛妤': {'林東美', '賀郁茵', '廖玟慈', '張宜芳', '蕭婷予', '陳亮寧', '王卉蓁', '許芸嘉', '李炎輝', '曾婷婷', '簡采琦'},
+                '簡采琦': {'廖玟慈', '張宜芳', '蕭婷予', '陳亮寧', '曾婷婷', '李炎輝', '林東美', '梁偉培', '王卉蓁', '許芸嘉', '賀郁茵'},
+                '廖慧雯': {'鍾宜珮', '林品亨', '蘇盟惠', '劉宛宣', '郭楷欣', '吳秉熹', '胡少淇', '陳昱綸', '黃穎蓁', '蔣郡哲', '劉婷瑜', '吳思函', '黃歆藝'},
+                '鍾宜珮': {'蘇盟惠', '劉宛宣', '郭楷欣', '吳秉熹', '胡少淇', '陳昱綸', '黃穎蓁', '蔣郡哲', '劉婷瑜', '吳思函', '林品亨', '黃歆藝'},
+                '林品亨': {'胡少淇', '陳昱綸', '蔣郡哲', '劉婷瑜', '吳思函', '郭楷欣', '吳秉熹', '劉宛宣', '蘇盟惠', '黃歆藝', '黃穎蓁'},
+                '楊顗帆': {'陳柔安', '林彥秀'},
+            }
+            
+            employee_subordinates = MANAGER_SUBORDINATES.get(employee, set())
+            
             if meta['org'] != '未分類':
                 peers = peers_map.get((meta['org'], meta['unit']), [])
                 existing_rater_names = set(r['name'] for r in current_raters)
-                missing_raters = sorted([p for p in peers if p != employee and p not in existing_rater_names])
+                for p in peers:
+                    if p != employee and p not in existing_rater_names:
+                        if p in employee_subordinates:
+                            subordinates.append(p)
+                        else:
+                            missing_raters.append(p)
+                missing_raters = sorted(missing_raters)
+                subordinates = sorted(subordinates)
             
             # Custom rounding: .1-.9 → round up (ceil), .0 → round down (floor)
             import math
@@ -693,8 +901,8 @@ class ScoreHandler(SimpleHTTPRequestHandler):
                     '兒少之家教保組其他員工': (['林東美', '賀郁茵', '梁偉培', '廖玟慈', '張宜芳', '蕭婷予', '王卉蓁', '陳亮寧', '李炎輝', '許芸嘉'], '保育股員績效平均')
                 },
                 '林品亨': {
-                    '少年家園生輔股': (['胡少淇', '郭楷欣', '吳秉熹', '蔣郡哲', '劉婷瑜', '黃穎蓁', '吳思函'], '生輔股員績效平均'),
-                    '少年家園教保組其他員工': (['蘇盟惠', '劉宛宣', '黃歆藝'], '社工心輔股員績效平均')
+                    '少年家園生輔股': (['胡少淇', '郭楷欣', '吳秉熹', '蔣郡哲', '劉婷瑜', '吳思函', '陳昱綸'], '生輔股員績效平均'),
+                    '少年家園教保組其他員工': (['蘇盟惠', '劉宛宣', '黃歆藝', '黃穎蓁'], '社工心輔股員績效平均')
                 },
                 # 4 Institution Heads: 50% 董事長 + 50% 下轄員工績效
                 '李冠葦': {
@@ -892,6 +1100,8 @@ class ScoreHandler(SimpleHTTPRequestHandler):
                 "org": meta['org'],
                 "unit": meta['unit'],
                 "section": meta['section'],
+                "role": meta.get('role', ''),
+                "title": meta.get('title', ''),
                 "average_score": total_rounded,  # Now using integer sum of rounded categories
                 "weighted_score": float(f"{final_score:.2f}"),  # Keep weighted score for reference
                 "cat1_avg": float(f"{cat1_avg:.2f}"),
@@ -903,6 +1113,7 @@ class ScoreHandler(SimpleHTTPRequestHandler):
                 "rater_count": len(scores),
                 "raters": processed_raters,
                 "missing_raters": missing_raters,
+                "subordinates": subordinates,
                 "is_weighted": is_weighted,
                 "breakdown": breakdown
             })

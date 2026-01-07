@@ -160,16 +160,51 @@ try:
         meta = staff_meta.get(employee, {"org": "未分類", "unit": "", "section": ""})
         
         # 2. Identify missing raters (Same Org + Unit, excluding self and existing raters)
+        # Separate subordinates (who don't need to rate their manager) from actual missing peers
         missing_raters = []
+        subordinates = []
+        
+        # Define manager -> subordinates relationships
+        MANAGER_SUBORDINATES = {
+            # 基金會 - 行政組
+            '李冠葦': {'陳淑錡', '林紀騰', '劉春燕', '林麗娟', '熊小蓮', '王元鼎', '王芊蓉', '陸廷瑋', '林港博', '謝秀桃', '徐銘澤', '羅如光'},
+            '陳淑錡': {'林紀騰', '劉春燕', '林麗娟', '熊小蓮', '王元鼎', '王芊蓉', '陸廷瑋', '林港博', '謝秀桃', '徐銘澤', '羅如光'},
+            '林紀騰': {'林港博', '謝秀桃', '徐銘澤', '羅如光'},
+            
+            # 基金會 - 圖書組
+            '高靜華': set(),
+            
+            # 兒少之家
+            '廖振杉': {'陳宛妤', '簡采琦', '林東美', '賀郁茵', '廖玟慈', '張宜芳', '蕭婷予', '陳亮寧', '王卉蓁', '許芸嘉', '李炎輝', '曾婷婷'},
+            '陳宛妤': {'林東美', '賀郁茵', '廖玟慈', '張宜芳', '蕭婷予', '陳亮寧', '王卉蓁', '許芸嘉', '李炎輝', '曾婷婷', '簡采琦'},
+            '簡采琦': {'廖玟慈', '張宜芳', '蕭婷予', '陳亮寧', '曾婷婷', '李炎輝', '林東美', '梁偉培', '王卉蓁', '許芸嘉', '賀郁茵'},
+            
+            # 少年家園
+            '廖慧雯': {'鍾宜珮', '林品亨', '蘇盟惠', '劉宛宣', '郭楷欣', '吳秉熹', '胡少淇', '陳昱綸', '黃穎蓁', '蔣郡哲', '劉婷瑜', '吳思函', '黃歆藝'},
+            '鍾宜珮': {'蘇盟惠', '劉宛宣', '郭楷欣', '吳秉熹', '胡少淇', '陳昱綸', '黃穎蓁', '蔣郡哲', '劉婷瑜', '吳思函', '林品亨', '黃歆藝'},
+            '林品亨': {'胡少淇', '陳昱綸', '蔣郡哲', '劉婷瑜', '吳思函', '郭楷欣', '吳秉熹', '劉宛宣', '蘇盟惠', '黃歆藝', '黃穎蓁'},
+            
+            # 諮商所
+            '楊顗帆': {'陳柔安', '林彥秀'},
+        }
+        
+        # Get this employee's subordinates (if they are a manager)
+        employee_subordinates = MANAGER_SUBORDINATES.get(employee, set())
+        
         if meta['org'] != '未分類':
             peers = peers_map.get((meta['org'], meta['unit']), [])
             existing_rater_names = set(r['name'] for r in current_raters)
             
             for peer in peers:
                 if peer != employee and peer not in existing_rater_names:
-                    missing_raters.append(peer)
+                    # Check if this peer is a subordinate of the current employee
+                    if peer in employee_subordinates:
+                        subordinates.append(peer)
+                    else:
+                        missing_raters.append(peer)
             
             missing_raters.sort()
+            subordinates.sort()
         
         # ==============================================
         # NEW: Complex Scoring Rules from 評分配比.docx
@@ -353,6 +388,7 @@ try:
             "rater_count": len(scores),
             "raters": processed_raters,
             "missing_raters": missing_raters,
+            "subordinates": subordinates,  # NEW: subordinates who don't need to rate
             "is_weighted": is_weighted,
             "breakdown": breakdown
         })
