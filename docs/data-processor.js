@@ -103,12 +103,16 @@ function parseStaffCSV(csvText) {
         const name = row['員工姓名'];
         if (name) {
             let org = row['所屬機構'] || '';
-            const unit = row['所屬單位'] || '';
+            let unit = row['所屬單位'] || '';
             const section = row['股別'] || '';
 
             // Normalize org
             // Explicit mapping for Institution Heads
-            if (name === '李冠葦' || name === '熊小蓮') org = '基金會';
+            if (name === '李冠葦') org = '基金會';
+            else if (name === '熊小蓮') {
+                org = '基金會';
+                unit = '行政組';
+            }
             else if (name === '廖振杉') org = '兒少之家';
             else if (name === '廖慧雯') org = '少年家園';
             else if (name === '楊顗帆') org = '諮商所';
