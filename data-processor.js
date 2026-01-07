@@ -107,7 +107,13 @@ function parseStaffCSV(csvText) {
             const section = row['股別'] || '';
 
             // Normalize org
-            if (['行政組', '社資組', '人資公關組', '圖書組', '會計室'].includes(unit)) {
+            // Explicit mapping for Institution Heads
+            if (name === '李冠葦' || name === '熊小蓮') org = '基金會';
+            else if (name === '廖振杉') org = '兒少之家';
+            else if (name === '廖慧雯') org = '少年家園';
+            else if (name === '楊顗帆') org = '諮商所';
+
+            else if (['行政組', '社資組', '人資公關組', '圖書組', '會計室'].includes(unit)) {
                 org = '基金會';
             } else if (org.includes('基金會')) {
                 org = '基金會';
