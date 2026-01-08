@@ -7,28 +7,45 @@
     <title>同仁互相回饋矩陣</title>
     <link rel="stylesheet" href="style.css">
     <style>
+        :root {
+            --col-width: 250px;
+            --row-height: 150px;
+        }
+
         /* Sticky Header Fix */
         .page-container {
             padding: 20px;
-            height: calc(100vh - 100px);
-            /* Adjust based on your header height */
+            height: calc(100vh - 120px);
             overflow: auto;
-            /* Scroll happens here */
             max-width: 100%;
         }
 
         .controls {
             margin-bottom: 20px;
             display: flex;
-            gap: 10px;
+            gap: 20px;
             align-items: center;
+            flex-wrap: wrap;
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 8px;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         select {
-            padding: 8px;
-            font-size: 16px;
+            padding: 6px;
+            font-size: 14px;
             border-radius: 4px;
             border: 1px solid #ccc;
+        }
+
+        input[type="range"] {
+            width: 150px;
         }
 
         /* Matrix Table Styles */
@@ -37,17 +54,17 @@
             border-spacing: 0;
             width: max-content;
             font-size: 14px;
+            table-layout: fixed;
         }
 
         .matrix-table th,
         .matrix-table td {
             border: 1px solid #ddd;
             padding: 8px;
-            min-width: 150px;
-            max-width: 300px;
+            width: var(--col-width);
+            min-width: var(--col-width);
             vertical-align: top;
             background-color: #fff;
-            /* Ensure bg so content doesn't show through */
         }
 
         /* Sticky Top Header */
@@ -63,7 +80,11 @@
             background-color: #f4f6f8;
             z-index: 10;
             box-shadow: 0 1px 0 #ddd;
-            /* Bottom border fix */
+            overflow: hidden;
+            text-overflow: ellipsis;
+            resize: horizontal;
+            overflow: auto;
+            /* Columns resizable */
         }
 
         /* Sticky Left Column */
@@ -74,24 +95,45 @@
             font-weight: bold;
             z-index: 5;
             box-shadow: 1px 0 0 #ddd;
-            /* Right border fix */
+            width: 120px;
+            min-width: 120px;
+            /* Fixed width for name col */
+        }
+
+        /* Hover Effect */
+        .matrix-table tbody tr:hover td {
+            background-color: #e6f7ff !important;
+            border-top: 1px solid #1890ff;
+            border-bottom: 1px solid #1890ff;
+        }
+
+        .matrix-table tbody tr:hover td.giver-name {
+            background-color: #bae7ff !important;
         }
 
         /* Corner Cell (Top-Left) needs both */
         .matrix-table th.corner {
             left: 0;
             z-index: 30;
+            width: 120px;
+            min-width: 120px;
         }
 
         .cell-content {
-            max-height: 150px;
+            height: var(--row-height);
             overflow-y: auto;
             white-space: pre-wrap;
             font-size: 13px;
+            resize: vertical;
+            /* Allow individual height resize */
+            overflow: auto;
         }
 
         .empty-cell {
             background-color: #fdfdfd;
+            color: #ccc;
+            font-style: italic;
+            font-size: 12px;
         }
 
         .has-content {
@@ -113,29 +155,37 @@
             align-items: center;
             gap: 5px;
         }
-
-        .nav-link:hover {
-            text-decoration: underline;
-        }
     </style>
 </head>
 
 <body>
     <div class="header">
-        <div class="logo">同仁互相回饋矩陣</div>
+        <div class="logo">同仁互評回饋矩陣</div>
         <a href="index.html" class="nav-link">← 返回首頁</a>
     </div>
 
     <div class="page-container">
         <div class="controls">
-            <label for="orgFilter">選擇機構：</label>
-            <select id="orgFilter">
-                <option value="all">全部</option>
-                <option value="基金會">基金會</option>
-                <option value="兒少之家">兒少之家</option>
-                <option value="少年家園">少年家園</option>
-                <option value="諮商所">諮商所</option>
-            </select>
+            <div class="control-group">
+                <label for="orgFilter">選擇機構：</label>
+                <select id="orgFilter">
+                    <option value="all">全部</option>
+                    <option value="基金會">基金會</option>
+                    <option value="兒少之家">兒少之家</option>
+                    <option value="少年家園">少年家園</option>
+                    <option value="諮商所">諮商所</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="widthRange">欄寬：</label>
+                <input type="range" id="widthRange" min="150" max="600" value="250" step="10">
+            </div>
+
+            <div class="control-group">
+                <label for="heightRange">列高：</label>
+                <input type="range" id="heightRange" min="50" max="500" value="150" step="10">
+            </div>
         </div>
 
         <div id="contentArea">
@@ -148,7 +198,19 @@
         let feedbackData = [];
         let staffDir = {};
         let feedbackHeaders = []; // Indices of feedback target columns
-        let targetNames = [];     // Names corresponding to those columns
+        let targetNames = []; // Names corresponding to those columns
+
+        // UI Controls
+        const widthRange = document.getElementById('widthRange');
+        const heightRange = document.getElementById('heightRange');
+
+        widthRange.addEventListener('input', (e) => {
+            document.documentElement.style.setProperty('--col-width', e.target.value + 'px');
+        });
+
+        heightRange.addEventListener('input', (e) => {
+            document.documentElement.style.setProperty('--row-height', e.target.value + 'px');
+        });
 
         async function init() {
             staffDir = await loadStaffDirectory();
