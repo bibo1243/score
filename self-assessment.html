@@ -416,9 +416,22 @@
                     return;
                 }
             } catch (e) {
-                console.log("API unavailable");
+                console.log("API unavailable, trying static data");
             }
-            // Fallback for Github Pages if needed...
+
+            // Fallback for Github Pages: load static processed data
+            try {
+                const res = await fetch('processed_data.json');
+                if (res.ok) {
+                    const data = await res.json();
+                    data.forEach(emp => {
+                        scoreData[emp.name] = emp;
+                    });
+                    console.log("Loaded static processed data");
+                }
+            } catch (e) {
+                console.error("Failed to load static score data", e);
+            }
         }
 
         async function loadAssessmentData() {
