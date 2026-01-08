@@ -197,6 +197,15 @@
         </div>
 
         <div class="control-group">
+            <label for="giverPersonFilter">回饋者：</label>
+            <select id="giverPersonFilter" style="min-width:120px;">
+                <option value="all">全部</option>
+            </select>
+            <input type="text" id="giverSearch" placeholder="搜尋姓名..."
+                style="width:100px; padding:4px; border:1px solid #ccc; border-radius:4px; margin-left:5px;">
+        </div>
+
+        <div class="control-group">
             <label for="receiverOrgFilter">受評者機構：</label>
             <select id="receiverOrgFilter">
                 <option value="all">全部</option>
@@ -205,6 +214,15 @@
                 <option value="少年家園">少年家園</option>
                 <option value="諮商所">諮商所</option>
             </select>
+        </div>
+
+        <div class="control-group">
+            <label for="receiverPersonFilter">受評者：</label>
+            <select id="receiverPersonFilter" style="min-width:120px;">
+                <option value="all">全部</option>
+            </select>
+            <input type="text" id="receiverSearch" placeholder="搜尋姓名..."
+                style="width:100px; padding:4px; border:1px solid #ccc; border-radius:4px; margin-left:5px;">
         </div>
 
         <div class="control-group">
@@ -231,12 +249,17 @@
         let staffDir = {};
         let feedbackHeaders = []; // Indices of feedback target columns
         let targetNames = []; // Names corresponding to those columns
+        let allGiverNames = []; // All unique giver names
 
         // UI Controls
         const widthRange = document.getElementById('widthRange');
         const heightRange = document.getElementById('heightRange');
         const giverOrgFilter = document.getElementById('giverOrgFilter');
         const receiverOrgFilter = document.getElementById('receiverOrgFilter');
+        const giverPersonFilter = document.getElementById('giverPersonFilter');
+        const receiverPersonFilter = document.getElementById('receiverPersonFilter');
+        const giverSearch = document.getElementById('giverSearch');
+        const receiverSearch = document.getElementById('receiverSearch');
 
         // Load Settings from LocalStorage
         function loadSettings() {
@@ -257,6 +280,37 @@
             if (savedReceiverOrg) receiverOrgFilter.value = savedReceiverOrg;
         }
 
+        // Populate person dropdown based on org selection
+        function updateGiverPersonOptions() {
+            const org = giverOrgFilter.value;
+            const searchTerm = giverSearch.value.toLowerCase();
+            giverPersonFilter.innerHTML = '<option value="all">全部</option>';
+
+            allGiverNames.filter(name => {
+                const info = staffDir[name];
+                const matchOrg = org === 'all' || (info && info.org === org);
+                const matchSearch = !searchTerm || name.toLowerCase().includes(searchTerm);
+                return matchOrg && matchSearch;
+            }).forEach(name => {
+                giverPersonFilter.innerHTML += `<option value="${name}">${name}</option>`;
+            });
+        }
+
+        function updateReceiverPersonOptions() {
+            const org = receiverOrgFilter.value;
+            const searchTerm = receiverSearch.value.toLowerCase();
+            receiverPersonFilter.innerHTML = '<option value="all">全部</option>';
+
+            targetNames.filter(name => {
+                const info = staffDir[name];
+                const matchOrg = org === 'all' || (info && info.org === org);
+                const matchSearch = !searchTerm || name.toLowerCase().includes(searchTerm);
+                return matchOrg && matchSearch;
+            }).forEach(name => {
+                receiverPersonFilter.innerHTML += `<option value="${name}">${name}</option>`;
+            });
+        }
+
         // Event Listeners with Persistence
         widthRange.addEventListener('input', (e) => {
             const val = e.target.value;
@@ -272,11 +326,25 @@
 
         giverOrgFilter.addEventListener('change', (e) => {
             localStorage.setItem('pf_giverOrg', e.target.value);
+            updateGiverPersonOptions();
             renderMatrix();
         });
 
         receiverOrgFilter.addEventListener('change', (e) => {
             localStorage.setItem('pf_receiverOrg', e.target.value);
+            updateReceiverPersonOptions();
+            renderMatrix();
+        });
+
+        giverPersonFilter.addEventListener('change', renderMatrix);
+        receiverPersonFilter.addEventListener('change', renderMatrix);
+
+        giverSearch.addEventListener('input', () => {
+            updateGiverPersonOptions();
+            renderMatrix();
+        });
+        receiverSearch.addEventListener('input', () => {
+            updateReceiverPersonOptions();
             renderMatrix();
         });
 
@@ -284,6 +352,8 @@
             loadSettings();
             staffDir = await loadStaffDirectory();
             await loadFeedbackData();
+            updateGiverPersonOptions();
+            updateReceiverPersonOptions();
             renderMatrix();
         }
 
@@ -337,6 +407,9 @@
                     };
                 }).filter(d => d.giver !== '未知');
 
+                // Build unique giver names list
+                allGiverNames = [...new Set(feedbackData.map(d => d.giver))];
+
             } catch (e) {
                 document.getElementById('contentArea').innerHTML = `<div class="loading" style="color:red">載入失敗: ${e.message}</div>`;
             }
@@ -345,10 +418,14 @@
         function renderMatrix() {
             const rOrg = receiverOrgFilter.value;
             const gOrg = giverOrgFilter.value;
+            const gPerson = giverPersonFilter.value;
+            const rPerson = receiverPersonFilter.value;
             const container = document.getElementById('contentArea');
 
             // 1. Determine Columns (Receivers) based on Receiver Filter
             let displayTargets = targetNames.filter(name => {
+                // Person filter takes precedence
+                if (rPerson !== 'all') return name === rPerson;
                 if (rOrg === 'all') return true;
                 const info = staffDir[name];
                 return info && info.org === rOrg;
@@ -380,12 +457,12 @@
                 const giver = row.giver;
                 const feedbacks = row.feedbacks;
 
+                // Filter Giver by Person (takes precedence)
+                if (gPerson !== 'all' && giver !== gPerson) return;
+
                 // Filter Giver by Org
                 const giverInfo = staffDir[giver];
-                if (gOrg !== 'all') {
-                    // Check giver org. 
-                    // Note: If giver name not in staffDir (e.g. name typo in CSV), it might be skipped if we strictly filter.
-                    // But 'all' shows everything.
+                if (gOrg !== 'all' && gPerson === 'all') {
                     if (!giverInfo || giverInfo.org !== gOrg) return;
                 }
 

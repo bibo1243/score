@@ -369,7 +369,13 @@
             const orgFilter = document.getElementById('orgFilter').value;
             const container = document.getElementById('contentArea');
 
+            // Institution heads and managers to exclude
+            const MANAGERS_TO_EXCLUDE = ['李冠葦', '廖振杉', '廖慧雯', '楊顗帆', '陳淑錡', '陳宛妤', '鍾宜珮', '高靜華', '白梅芳'];
+
             const filtered = assessmentData.filter(d => {
+                // Skip managers
+                if (MANAGERS_TO_EXCLUDE.includes(d.name)) return false;
+                // Org filter
                 if (orgFilter === 'all') return true;
                 return d.org === orgFilter;
             });
