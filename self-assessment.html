@@ -282,6 +282,7 @@
     </div>
 
     <!-- Scripts needed for score calculation -->
+    <script src="supabase-client.js"></script>
     <script src="data-processor.js"></script>
     <script src="feedback-utils.js"></script>
     <script>
@@ -406,6 +407,7 @@
         }
 
         async function loadScoreData() {
+            // Priority 1: Local server API (for localhost)
             try {
                 const response = await fetch('/api/data');
                 if (response.ok) {
@@ -413,13 +415,28 @@
                     data.forEach(emp => {
                         scoreData[emp.name] = emp;
                     });
+                    console.log("Loaded from local API");
                     return;
                 }
             } catch (e) {
-                console.log("API unavailable, trying static data");
+                console.log("Local API unavailable, trying Supabase");
             }
 
-            // Fallback for Github Pages: load static processed data
+            // Priority 2: Real-time Supabase data (for GitHub Pages)
+            try {
+                if (typeof loadProcessedData === 'function') {
+                    const data = await loadProcessedData();
+                    data.forEach(emp => {
+                        scoreData[emp.name] = emp;
+                    });
+                    console.log("Loaded real-time data from Supabase");
+                    return;
+                }
+            } catch (e) {
+                console.log("Supabase load failed, trying static data", e);
+            }
+
+            // Priority 3: Static fallback (processed_data.json)
             try {
                 const res = await fetch('processed_data.json');
                 if (res.ok) {
@@ -430,7 +447,7 @@
                     console.log("Loaded static processed data");
                 }
             } catch (e) {
-                console.error("Failed to load static score data", e);
+                console.error("Failed to load any score data", e);
             }
         }
 
