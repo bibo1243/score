@@ -357,7 +357,8 @@
                 const units = new Set();
                 assessmentData.forEach(d => {
                     if (orgVal === 'all' || d.org === orgVal) {
-                        if (d.unit) units.add(d.unit);
+                        // Exclude unit if it is same as org name (redundant)
+                        if (d.unit && d.unit !== d.org) units.add(d.unit);
                     }
                 });
 
