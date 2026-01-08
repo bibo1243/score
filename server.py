@@ -176,111 +176,28 @@ class ScoreHandler(SimpleHTTPRequestHandler):
             except Exception as e:
                 self.send_error(500, f"Error: {str(e)}")
             return
-        
-        # Update a score
-        if parsed_path.path == '/api/update-score':
-            self.send_response(200)
-            self.send_header('Content-Type', 'text/csv; charset=utf-8')
-            self.send_header('Content-Disposition', 'attachment; filename="score_backup.csv"')
-            self.end_headers()
-            
-            with open(os.path.join(BASE_DIR, 'score_backup.csv'), 'rb') as f:
-                self.wfile.write(f.read())
-            return
 
-        # API endpoint for getting bonuses
-        if parsed_path.path == '/api/bonuses':
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json; charset=utf-8')
-            self.send_header('Cache-Control', 'no-cache')
-            self.end_headers()
-            
-            bonuses = {}
-            bonus_file = os.path.join(BASE_DIR, 'bonuses.json')
-            if os.path.exists(bonus_file):
-                try:
-                    with open(bonus_file, 'r', encoding='utf-8') as f:
-                        bonuses = json.load(f)
-                except:
-                    bonuses = {}
-            self.wfile.write(json.dumps(bonuses, ensure_ascii=False).encode('utf-8'))
-            return
-            
-        # Serve static files normally
-        return super().do_GET()
-
-    def do_POST(self):
-        parsed_path = urlparse(self.path)
-        
-        # Save bonus endpoint
-        if parsed_path.path == '/api/save_bonus':
-            content_length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(content_length)
-            try:
-                data = json.loads(post_data.decode('utf-8'))
-                name = data.get('name')
-                bonus = data.get('bonus')
-                
-                if name is not None and bonus is not None:
-                    bonus_file = os.path.join(BASE_DIR, 'bonuses.json')
-                    bonuses = {}
-                    if os.path.exists(bonus_file):
-                        try:
-                            with open(bonus_file, 'r', encoding='utf-8') as f:
-                                bonuses = json.load(f)
-                        except:
-                            pass
-                    
-                    bonuses[name] = int(bonus) # Ensure int
-                    
-                    with open(bonus_file, 'w', encoding='utf-8') as f:
-                        json.dump(bonuses, f, ensure_ascii=False, indent=2)
-                        
-                    self.send_response(200)
-                    self.send_header('Content-type', 'application/json')
-                    self.end_headers()
-                    self.wfile.write(json.dumps({"status": "ok"}).encode('utf-8'))
-                else:
-                    self.send_error(400, "Missing name or bonus")
-            except Exception as e:
-                self.send_error(500, f"Error: {str(e)}")
-            return
-            
-        self.send_error(404, "Not Found")
-            csv_content, filename = self.get_backup_csv()
-            
-            self.send_response(200)
-            self.send_header('Content-type', 'text/csv; charset=utf-8')
-            self.send_header('Content-Disposition', f'attachment; filename="{filename}"')
-            self.end_headers()
-            
-            self.wfile.write(csv_content.encode('utf-8-sig'))
-            return
-        
-        # API endpoint for deleted scores
-        if parsed_path.path == '/api/deleted-scores':
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json; charset=utf-8')
-            self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
-            self.end_headers()
-            
-            data = self.get_deleted_scores()
-            self.wfile.write(json.dumps(data, ensure_ascii=False, indent=2).encode('utf-8'))
-            return
-        
-        # Serve static files normally
-        return super().do_GET()
-    
-    def do_POST(self):
-        parsed_path = urlparse(self.path)
-        content_length = int(self.headers.get('Content-Length', 0))
-        post_data = self.rfile.read(content_length).decode('utf-8')
-        
         # Update a score
         if parsed_path.path == '/api/update-score':
             try:
                 data = json.loads(post_data)
                 result = self.update_score(data)
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps(result, ensure_ascii=False).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": str(e)}, ensure_ascii=False).encode('utf-8'))
+            return
+        
+        # Add a new rater score
+        if parsed_path.path == '/api/add-score':
+            try:
+                data = json.loads(post_data)
+                result = self.add_score(data)
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json; charset=utf-8')
                 self.end_headers()
@@ -355,21 +272,7 @@ class ScoreHandler(SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({"success": False, "error": str(e)}, ensure_ascii=False).encode('utf-8'))
             return
         
-        # Add a new score
-        if parsed_path.path == '/api/add-score':
-            try:
-                data = json.loads(post_data)
-                result = self.add_score(data)
-                self.send_response(200)
-                self.send_header('Content-type', 'application/json; charset=utf-8')
-                self.end_headers()
-                self.wfile.write(json.dumps(result, ensure_ascii=False).encode('utf-8'))
-            except Exception as e:
-                self.send_response(500)
-                self.send_header('Content-type', 'application/json; charset=utf-8')
-                self.end_headers()
-                self.wfile.write(json.dumps({"success": False, "error": str(e)}, ensure_ascii=False).encode('utf-8'))
-            return
+
         
         self.send_response(404)
         self.end_headers()
