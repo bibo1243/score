@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>API 診斷</title>
+    <meta charset="utf-8">
+</head>
+
+<body>
+    <h1>API 診斷頁面</h1>
+    <div id="result">載入中...</div>
+    <script>
+        async function test() {
+            const resultDiv = document.getElementById('result');
+            try {
+                const response = await fetch('/api/data');
+                if (!response.ok) {
+                    resultDiv.innerHTML = '<p style="color:red">API 請求失敗: ' + response.status + '</p>';
+                    return;
+                }
+                const data = await response.json();
+
+                // 找到鍾宜珮的資料
+                const employee = data.find(p => p.name === '鍾宜珮');
+                if (employee) {
+                    resultDiv.innerHTML = `
+                        <h2>鍾宜珮的資料 (來自 API)</h2>
+                        <p><strong>average_score:</strong> ${employee.average_score}</p>
+                        <p><strong>cat1_rounded:</strong> ${employee.cat1_rounded}</p>
+                        <p><strong>cat2_rounded:</strong> ${employee.cat2_rounded}</p>
+                        <p><strong>cat3_rounded:</strong> ${employee.cat3_rounded}</p>
+                        <p><strong>cat1_avg:</strong> ${employee.cat1_avg}</p>
+                        <p><strong>cat2_avg:</strong> ${employee.cat2_avg}</p>
+                        <p><strong>cat3_avg:</strong> ${employee.cat3_avg}</p>
+                        <hr>
+                        <p>如果上面顯示 average_score=88，代表 API 正確。<br>
+                        如果首頁顯示 90，代表首頁沒有使用 API 的資料。</p>
+                    `;
+                } else {
+                    resultDiv.innerHTML = '<p style="color:red">找不到鍾宜珮的資料</p>';
+                }
+            } catch (err) {
+                resultDiv.innerHTML = '<p style="color:red">錯誤: ' + err.message + '</p>';
+            }
+        }
+        test();
+    </script>
+</body>
+
+</html>
