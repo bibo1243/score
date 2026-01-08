@@ -243,14 +243,34 @@
 
     <div class="page-container">
         <div class="controls">
-            <label for="orgFilter">選擇機構：</label>
-            <select id="orgFilter">
-                <option value="all">全部</option>
-                <option value="基金會">基金會</option>
-                <option value="兒少之家">兒少之家</option>
-                <option value="少年家園">少年家園</option>
-                <option value="諮商所">諮商所</option>
-            </select>
+            <div style="display:flex; gap:15px; align-items:center; flex-wrap:wrap;">
+                <div class="filter-group">
+                    <label for="orgFilter">機構：</label>
+                    <select id="orgFilter" style="padding:5px; border-radius:4px; border:1px solid #ccc;">
+                        <option value="all">全部</option>
+                        <option value="基金會">基金會</option>
+                        <option value="兒少之家">兒少之家</option>
+                        <option value="少年家園">少年家園</option>
+                        <option value="諮商所">諮商所</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label for="unitFilter">組別：</label>
+                    <select id="unitFilter"
+                        style="padding:5px; border-radius:4px; border:1px solid #ccc; min-width:100px;">
+                        <option value="all">全部</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label for="nameFilter">姓名：</label>
+                    <input list="nameList" id="nameFilter" placeholder="搜尋姓名..."
+                        style="padding:5px; border-radius:4px; border:1px solid #ccc; width:120px;">
+                    <datalist id="nameList"></datalist>
+                </div>
+            </div>
+
             <div style="margin-left:auto; font-size:13px; color:#666;">
                 * 系統分數會自動同步，加分上限為 3 分
             </div>
@@ -299,7 +319,78 @@
                 loadBonuses()
             ]);
 
+            // Setup new filters
+            setupFilters();
             renderList();
+        }
+
+        function setupFilters() {
+            const orgSelect = document.getElementById('orgFilter');
+            const unitSelect = document.getElementById('unitFilter');
+            const nameInput = document.getElementById('nameFilter');
+
+            orgSelect.addEventListener('change', () => {
+                updateFilters('org');
+                renderList();
+            });
+
+            unitSelect.addEventListener('change', () => {
+                renderList();
+            });
+
+            nameInput.addEventListener('input', () => {
+                renderList();
+            });
+
+            // Initial population
+            updateFilters('init');
+        }
+
+        function updateFilters(source) {
+            const orgVal = document.getElementById('orgFilter').value;
+            const unitSelect = document.getElementById('unitFilter');
+            const nameList = document.getElementById('nameList');
+            const currentUnit = unitSelect.value;
+
+            // 1. Update Unit Options (if source is 'init' or 'org')
+            if (source === 'init' || source === 'org') {
+                const units = new Set();
+                assessmentData.forEach(d => {
+                    if (orgVal === 'all' || d.org === orgVal) {
+                        if (d.unit) units.add(d.unit);
+                    }
+                });
+
+                // Sort units custom order if needed, or alphabetical
+                const sortedUnits = Array.from(units).sort();
+
+                unitSelect.innerHTML = '<option value="all">全部</option>';
+                sortedUnits.forEach(u => {
+                    unitSelect.innerHTML += `<option value="${u}">${u}</option>`;
+                });
+
+                // Try to keep selection if valid
+                if (units.has(currentUnit)) {
+                    unitSelect.value = currentUnit;
+                } else {
+                    unitSelect.value = 'all';
+                }
+            }
+
+            // 2. Update Name Datalist
+            // Filter available names based on current Org & Unit selection
+            const unitVal = unitSelect.value;
+            nameList.innerHTML = '';
+
+            assessmentData.filter(d => {
+                const matchOrg = orgVal === 'all' || d.org === orgVal;
+                const matchUnit = unitVal === 'all' || d.unit === unitVal;
+                // Exclude managers from list
+                const MANAGERS_TO_EXCLUDE = ['李冠葦', '廖振杉', '廖慧雯', '楊顗帆', '陳淑錡', '陳宛妤', '鍾宜珮', '高靜華', '白梅芳'];
+                return matchOrg && matchUnit && !MANAGERS_TO_EXCLUDE.includes(d.name);
+            }).forEach(d => {
+                nameList.innerHTML += `<option value="${d.name}">`;
+            });
         }
 
         async function loadBonuses() {
@@ -367,17 +458,27 @@
 
         function renderList() {
             const orgFilter = document.getElementById('orgFilter').value;
+            const unitFilter = document.getElementById('unitFilter').value;
+            const nameFilter = document.getElementById('nameFilter').value.trim();
             const container = document.getElementById('contentArea');
 
             // Institution heads and managers to exclude
             const MANAGERS_TO_EXCLUDE = ['李冠葦', '廖振杉', '廖慧雯', '楊顗帆', '陳淑錡', '陳宛妤', '鍾宜珮', '高靜華', '白梅芳'];
 
-            const filtered = assessmentData.filter(d => {
+            let filtered = assessmentData.filter(d => {
                 // Skip managers
                 if (MANAGERS_TO_EXCLUDE.includes(d.name)) return false;
+
                 // Org filter
-                if (orgFilter === 'all') return true;
-                return d.org === orgFilter;
+                if (orgFilter !== 'all' && d.org !== orgFilter) return false;
+
+                // Unit filter
+                if (unitFilter !== 'all' && d.unit !== unitFilter) return false;
+
+                // Name filter (Search)
+                if (nameFilter && !d.name.includes(nameFilter)) return false;
+
+                return true;
             });
 
             if (filtered.length === 0) {
@@ -385,8 +486,46 @@
                 return;
             }
 
+            // Sort data: Org -> Unit -> Name
+            filtered.sort((a, b) => {
+                if (a.org !== b.org) return a.org.localeCompare(b.org);
+                if (a.unit !== b.unit) {
+                    // Put empty unit at end
+                    if (!a.unit) return 1;
+                    if (!b.unit) return -1;
+                    return a.unit.localeCompare(b.unit);
+                }
+                return a.name.localeCompare(b.name);
+            });
+
             let html = '';
+            let currentUnitGroup = null;
+
             filtered.forEach((emp, index) => {
+                // Insert Unit Header if changed
+                // Display separation header for better readability
+                const displayUnit = emp.unit || '其他';
+                const displayGroupKey = `${emp.org} - ${displayUnit}`;
+
+                if (displayGroupKey !== currentUnitGroup) {
+                    currentUnitGroup = displayGroupKey;
+                    html += `<div class="group-header" style="
+                        margin: 30px 0 15px 0; 
+                        padding: 8px 15px; 
+                        background: #e0e7ff; 
+                        color: #3730a3; 
+                        border-radius: 6px; 
+                        font-weight: bold; 
+                        font-size: 1.1em;
+                        border-left: 5px solid #4f46e5;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                    ">
+                        <span>${emp.org} <i class="fa-solid fa-chevron-right" style="font-size:0.8em; margin:0 5px;"></i> ${displayUnit}</span>
+                    </div>`;
+                }
+
                 // Get saved bonus
                 // Prioritize Server Bonus -> LocalStorage -> 0
                 const serverBonus = bonuses[emp.name];
@@ -577,7 +716,9 @@
                 .replace(/'/g, "&#039;");
         }
 
-        document.getElementById('orgFilter').addEventListener('change', renderList);
+
+
+        // Event listeners removed here as they are now in setupFilters() inside init()
 
         init();
     </script>
