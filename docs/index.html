@@ -119,9 +119,28 @@
     </main>
     </div>
 
+    <div id="toast" class="toast"></div>
+
     <script src="supabase-client.js"></script>
     <script src="data-processor.js"></script>
     <script src="script.js"></script>
+    <script>
+        // Handle Deep Linking from other pages
+        window.addEventListener('load', () => {
+            const params = new URLSearchParams(window.location.search);
+            const searchName = params.get('search');
+            if (searchName) {
+                const searchInput = document.getElementById('searchInput');
+                if (searchInput) {
+                    searchInput.value = decodeURIComponent(searchName);
+                    // Dispatch input event to trigger filter logic in script.js
+                    searchInput.dispatchEvent(new Event('input'));
+                    // Scroll to top or specific element if needed
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+            }
+        });
+    </script>
 </body>
 
 </html>
