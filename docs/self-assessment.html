@@ -9,7 +9,7 @@
     <style>
         .page-container {
             padding: 20px;
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
         }
 
@@ -18,6 +18,9 @@
             display: flex;
             gap: 10px;
             align-items: center;
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 8px;
         }
 
         .nav-link {
@@ -59,10 +62,40 @@
             border-radius: 4px;
         }
 
+        /* Split Layout */
         .card-body {
-            padding: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            padding: 0;
         }
 
+        .assessment-content {
+            flex: 1;
+            min-width: 60%;
+            padding: 20px;
+            border-right: 1px solid #eee;
+        }
+
+        .score-sidebar {
+            flex: 0 0 350px;
+            padding: 20px;
+            background-color: #fafafa;
+            border-left: 1px solid #eee;
+        }
+
+        @media (max-width: 900px) {
+            .score-sidebar {
+                flex: 100%;
+                border-left: none;
+                border-top: 1px solid #eee;
+            }
+
+            .assessment-content {
+                border-right: none;
+            }
+        }
+
+        /* Assessment Styles */
         .section-block {
             margin-bottom: 25px;
         }
@@ -96,43 +129,115 @@
             color: #333;
         }
 
-        .score-section {
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px dashed #ccc;
+        /* Score Dashboard Styles */
+        .score-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            margin-bottom: 20px;
+        }
+
+        .score-title {
+            font-weight: bold;
+            color: #333;
+            border-bottom: 2px solid #efefef;
+            padding-bottom: 5px;
+            margin-bottom: 10px;
+        }
+
+        .score-row {
             display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            gap: 10px;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 14px;
         }
 
         .score-label {
+            color: #666;
+        }
+
+        .score-value {
             font-weight: bold;
+            color: #333;
+        }
+
+        .main-score {
             font-size: 18px;
-            color: #d35400;
+            color: #2c3e50;
+            border-top: 1px dashed #ccc;
+            padding-top: 5px;
+            margin-top: 5px;
         }
 
-        .score-input {
-            padding: 8px;
-            width: 100px;
-            font-size: 24px;
+        .bonus-section {
+            background: #fff8f0;
+            border: 1px solid #ffe0b2;
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .bonus-input-group {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .bonus-label {
+            font-weight: bold;
+            color: #d35400;
+            font-size: 16px;
+        }
+
+        .bonus-input {
+            width: 80px;
+            padding: 5px;
+            font-size: 18px;
             text-align: center;
-            border: 2px solid #ddd;
-            border-radius: 6px;
+            border: 2px solid #edaf78;
+            border-radius: 4px;
             color: #d35400;
             font-weight: bold;
         }
 
-        .score-input:focus {
-            border-color: #d35400;
-            outline: none;
+        .final-score-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 2px solid #edaf78;
+        }
+
+        .final-score-label {
+            font-weight: bold;
+            color: #333;
+        }
+
+        .final-score-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #e67e22;
+        }
+
+        .raters-list {
+            margin-top: 5px;
+            font-size: 12px;
+            color: #888;
+            line-height: 1.4;
+        }
+
+        .loading {
+            padding: 40px;
+            text-align: center;
         }
     </style>
 </head>
 
 <body>
     <div class="header">
-        <div class="logo">自我考核表拆分檢視</div>
+        <div class="logo">自我考核與分數對照表</div>
         <a href="index.html" class="nav-link">← 返回首頁</a>
     </div>
 
@@ -146,6 +251,9 @@
                 <option value="少年家園">少年家園</option>
                 <option value="諮商所">諮商所</option>
             </select>
+            <div style="margin-left:auto; font-size:13px; color:#666;">
+                * 系統分數會自動同步，加分上限為 3 分
+            </div>
         </div>
 
         <div id="contentArea">
@@ -153,30 +261,22 @@
         </div>
     </div>
 
+    <!-- Scripts needed for score calculation -->
+    <script src="data-processor.js"></script>
     <script src="feedback-utils.js"></script>
     <script>
         let assessmentData = [];
+        let scoreData = {}; // Map of Name -> Score Object
         let staffDir = {};
 
-        // Define Data Mapping (Indices in CSV)
-        // 51: 自我成長
-        // 52: 專業成長
-        // 53: 專業表現-1 (目標)
-        // 54: 專業表現-2 (%)
-        // 55: 專業表現-3 (良好)
-        // 56: 專業表現-4 (做法)
         const SECTIONS = [
             {
                 title: "壹、自我成長",
-                items: [
-                    { q: "請以一個您的實際經驗/故事，分享您在慈馨家工作，所感受到對於您的自我成長？", colIndex: 51 }
-                ]
+                items: [{ q: "請以一個您的實際經驗/故事，分享您在慈馨家工作，所感受到對於您的自我成長？", colIndex: 51 }]
             },
             {
                 title: "貳、專業成長",
-                items: [
-                    { q: "請以一個您的實際經驗/故事，分享您在慈馨家工作，所感受到的專業成長？", colIndex: 52 }
-                ]
+                items: [{ q: "請以一個您的實際經驗/故事，分享您在慈馨家工作，所感受到的專業成長？", colIndex: 52 }]
             },
             {
                 title: "参、專業表現",
@@ -191,8 +291,53 @@
 
         async function init() {
             staffDir = await loadStaffDirectory();
-            await loadAssessmentData();
+
+            // Parallel fetch: Assessment Text & Calculated Scores
+            await Promise.all([
+                loadAssessmentData(),
+                loadScoreData()
+            ]);
+
             renderList();
+        }
+
+        async function loadScoreData() {
+            try {
+                // Try Local API first (Real-time)
+                const response = await fetch('/api/data');
+                if (response.ok) {
+                    const data = await response.json();
+                    // Index by Name
+                    data.forEach(emp => {
+                        scoreData[emp.name] = emp;
+                    });
+                    console.log("Loaded scores from API");
+                    return;
+                }
+            } catch (e) {
+                console.log("API unavailable, trying static fallback...");
+            }
+
+            // Fallback: Use data-processor.js logic (Github Pages mode)
+            // Function from data-processor.js: loadProcessedData() which fetches score.csv internally? 
+            // We need to ensure score.csv is available. 
+            // Note: Data-processor typically handles CSV fetching if logic is exposed.
+            // Let's manually fetch score.csv and use processScoresForDisplay if available.
+            try {
+                if (typeof fetchScores === 'function' && typeof processScoresForDisplay === 'function') {
+                    // Assuming data-processor exposes these or we can use them
+                    // Need 'score.csv'
+                    // Actually data-processor.js has `fetchScores` that fetches 'score.csv'.
+                    const rawScores = await fetchScores(); // Global function from data-processor.js
+                    const processed = await processScoresForDisplay(rawScores);
+                    processed.forEach(emp => {
+                        scoreData[emp.name] = emp;
+                    });
+                    console.log("Loaded scores from Static CSV");
+                }
+            } catch (e) {
+                console.error("Failed to load scores:", e);
+            }
         }
 
         async function loadAssessmentData() {
@@ -207,12 +352,10 @@
                 const headers = rows[0].map(h => h.trim());
                 const nameIdx = headers.indexOf('姓名');
 
-                // Parse rows
                 assessmentData = rows.slice(1).map(r => {
-                    const name = r[nameIdx] || '未知';
+                    const name = r[nameIdx] ? r[nameIdx].trim() : '未知';
                     const employeeInfo = staffDir[name] || { org: '未分類' };
 
-                    // Extract answers
                     const answers = {};
                     SECTIONS.forEach(sec => {
                         sec.items.forEach(item => {
@@ -247,10 +390,15 @@
             }
 
             let html = '';
-            filtered.forEach(emp => {
-                // Get saved score
-                const scoreKey = `assessment_score_${emp.name}`;
-                const savedScore = localStorage.getItem(scoreKey) || '';
+            filtered.forEach((emp, index) => {
+                // Get saved bonus
+                const bonusKey = `assessment_bonus_${emp.name}`;
+                const savedBonus = localStorage.getItem(bonusKey) || 0;
+
+                // Get score data
+                const scores = scoreData[emp.name] || {};
+                const baseScore = parseFloat(scores.total_weighted_score || 0);
+                const finalScore = (baseScore + parseFloat(savedBonus)).toFixed(1);
 
                 html += `
                 <div class="employee-assessment-card">
@@ -259,6 +407,8 @@
                         <div class="employee-org">${emp.org}</div>
                     </div>
                     <div class="card-body">
+                        <!-- Left: Assessment Content -->
+                        <div class="assessment-content">
                 `;
 
                 SECTIONS.forEach(sec => {
@@ -273,31 +423,86 @@
                                 <div class="question">${item.q}</div>
                                 <div class="answer">${escapeHtml(ans)}</div>
                             </div>`;
+                        } else {
+                            html += `<div class="qa-item"><div class="question">${item.q}</div><div class="answer" style="color:#ccc;">(未填寫)</div></div>`;
                         }
                     });
-
                     html += `</div>`;
                 });
 
-                // Score Input
+                html += `</div> <!-- End assessment-content -->`;
+
+                // Right: Score Dashboard
                 html += `
-                    <div class="score-section">
-                        <span class="score-label">考核評分：</span>
-                        <input type="number" class="score-input" value="${savedScore}" 
-                            oninput="saveScore('${emp.name}', this.value)" placeholder="分數">
-                    </div>
+                        <div class="score-sidebar">
+                            <div class="score-card">
+                                <div class="score-title">目前考核試算</div>
+                                <div class="score-row">
+                                    <span class="score-label">系統原始分</span>
+                                    <span class="score-value">${baseScore || '-'}</span>
+                                </div>
                 `;
 
-                html += `</div></div>`;
+                // Breakdown
+                if (scores.cat1_avg !== undefined) {
+                    html += `<div class="score-row"><span class="score-label">主管評分</span><span class="score-value">${scores.cat1_avg}</span></div>`;
+                }
+                if (scores.cat2_avg !== undefined) {
+                    html += `<div class="score-row"><span class="score-label">同仁互評</span><span class="score-value">${scores.cat2_avg}</span></div>`;
+                }
+                if (scores.subordinate_avg !== undefined && scores.subordinate_avg > 0) {
+                    html += `<div class="score-row"><span class="score-label">下屬績效</span><span class="score-value">${scores.subordinate_avg}</span></div>`;
+                }
+
+                html += `</div>`; // End score-card
+
+                // Bonus Section
+                html += `
+                            <div class="bonus-section">
+                                <div class="bonus-input-group">
+                                    <span class="bonus-label">加分 (Max 3)</span>
+                                    <input type="number" class="bonus-input" id="bonus-${index}" 
+                                        min="0" max="3" step="0.1"
+                                        value="${savedBonus}" 
+                                        oninput="updateBonus('${emp.name}', ${index}, ${baseScore}, this.value)">
+                                </div>
+                                <div class="raters-list">請根據左側自我考核內容，給予適當加分。</div>
+                                
+                                <div class="final-score-row">
+                                    <span class="final-score-label">最終總分</span>
+                                    <span class="final-score-value" id="final-${index}">${finalScore}</span>
+                                </div>
+                            </div>
+                        </div> <!-- End score-sidebar -->
+                    </div> <!-- End card-body -->
+                </div>`;
             });
 
             container.innerHTML = html;
         }
 
-        // Save score to LocalStorage
-        window.saveScore = function (name, val) {
-            const key = `assessment_score_${name}`;
-            localStorage.setItem(key, val);
+        window.updateBonus = function (name, idx, baseScore, val) {
+            let numVal = parseFloat(val);
+            if (isNaN(numVal)) numVal = 0;
+
+            // Limit to 3 (Allow decimal?) Yes step 0.1
+            // User requested "Max 3".
+            if (numVal > 3) {
+                numVal = 3;
+                document.getElementById(`bonus-${idx}`).value = 3;
+                // Optional: alert?
+            }
+            if (numVal < 0) {
+                numVal = 0;
+                document.getElementById(`bonus-${idx}`).value = 0;
+            }
+
+            // Save
+            localStorage.setItem(`assessment_bonus_${name}`, numVal);
+
+            // Update UI
+            const final = (baseScore + numVal).toFixed(1);
+            document.getElementById(`final-${idx}`).innerText = final;
         }
 
         function escapeHtml(text) {
