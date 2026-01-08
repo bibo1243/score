@@ -37,6 +37,32 @@ async function fetchScores() {
     return await supabaseRequest('scores?select=*&order=ratee,rater');
 }
 
+// Add a new score
+async function addScoreInSupabase(ratee, rater, cat1, cat2, cat3) {
+    // Check if exists
+    const endpoint = `scores?ratee=eq.${encodeURIComponent(ratee)}&rater=eq.${encodeURIComponent(rater)}&select=id`;
+    const existing = await supabaseRequest(endpoint);
+
+    if (existing && existing.length > 0) {
+        throw new Error(`${rater} 對 ${ratee} 的評分已存在`);
+    }
+
+    // Insert
+    return await supabaseRequest('scores', {
+        method: 'POST',
+        body: {
+            ratee,
+            rater,
+            cat1,
+            cat2,
+            cat3,
+            original_cat1: cat1,
+            original_cat2: cat2,
+            original_cat3: cat3
+        }
+    });
+}
+
 // Update a score
 async function updateScoreInSupabase(ratee, rater, cat1, cat2, cat3) {
     const endpoint = `scores?ratee=eq.${encodeURIComponent(ratee)}&rater=eq.${encodeURIComponent(rater)}`;

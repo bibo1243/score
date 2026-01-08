@@ -1522,6 +1522,19 @@ async function submitNewRater() {
     }
 
     try {
+        // If running on GitHub Pages, use Supabase Client directly
+        if (location.hostname.includes('github.io')) {
+            if (typeof addScoreInSupabase !== 'function') {
+                throw new Error('Supabase client module missing');
+            }
+            await addScoreInSupabase(ratee, rater, cat1, cat2, cat3);
+            alert('新增成功！');
+            closeAddRaterModal();
+            location.reload();
+            return;
+        }
+
+        // Local Server Logic
         const response = await fetch('/api/add-score', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
