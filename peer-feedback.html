@@ -198,11 +198,9 @@
 
         <div class="control-group">
             <label for="giverPersonFilter">回饋者：</label>
-            <select id="giverPersonFilter" style="min-width:120px;">
-                <option value="all">全部</option>
-            </select>
-            <input type="text" id="giverSearch" placeholder="搜尋姓名..."
-                style="width:100px; padding:4px; border:1px solid #ccc; border-radius:4px; margin-left:5px;">
+            <input list="giverPersonList" id="giverPersonFilter" placeholder="全部 (輸入搜尋)"
+                style="min-width:140px; padding:4px; border:1px solid #ccc; border-radius:4px;">
+            <datalist id="giverPersonList"></datalist>
         </div>
 
         <div class="control-group">
@@ -218,11 +216,9 @@
 
         <div class="control-group">
             <label for="receiverPersonFilter">受評者：</label>
-            <select id="receiverPersonFilter" style="min-width:120px;">
-                <option value="all">全部</option>
-            </select>
-            <input type="text" id="receiverSearch" placeholder="搜尋姓名..."
-                style="width:100px; padding:4px; border:1px solid #ccc; border-radius:4px; margin-left:5px;">
+            <input list="receiverPersonList" id="receiverPersonFilter" placeholder="全部 (輸入搜尋)"
+                style="min-width:140px; padding:4px; border:1px solid #ccc; border-radius:4px;">
+            <datalist id="receiverPersonList"></datalist>
         </div>
 
         <div class="control-group">
@@ -258,8 +254,8 @@
         const receiverOrgFilter = document.getElementById('receiverOrgFilter');
         const giverPersonFilter = document.getElementById('giverPersonFilter');
         const receiverPersonFilter = document.getElementById('receiverPersonFilter');
-        const giverSearch = document.getElementById('giverSearch');
-        const receiverSearch = document.getElementById('receiverSearch');
+        const giverPersonList = document.getElementById('giverPersonList');
+        const receiverPersonList = document.getElementById('receiverPersonList');
 
         // Load Settings from LocalStorage
         function loadSettings() {
@@ -280,34 +276,28 @@
             if (savedReceiverOrg) receiverOrgFilter.value = savedReceiverOrg;
         }
 
-        // Populate person dropdown based on org selection
+        // Populate person datalist based on org selection
         function updateGiverPersonOptions() {
             const org = giverOrgFilter.value;
-            const searchTerm = giverSearch.value.toLowerCase();
-            giverPersonFilter.innerHTML = '<option value="all">全部</option>';
+            giverPersonList.innerHTML = '';
 
             allGiverNames.filter(name => {
                 const info = staffDir[name];
-                const matchOrg = org === 'all' || (info && info.org === org);
-                const matchSearch = !searchTerm || name.toLowerCase().includes(searchTerm);
-                return matchOrg && matchSearch;
+                return org === 'all' || (info && info.org === org);
             }).forEach(name => {
-                giverPersonFilter.innerHTML += `<option value="${name}">${name}</option>`;
+                giverPersonList.innerHTML += `<option value="${name}">`;
             });
         }
 
         function updateReceiverPersonOptions() {
             const org = receiverOrgFilter.value;
-            const searchTerm = receiverSearch.value.toLowerCase();
-            receiverPersonFilter.innerHTML = '<option value="all">全部</option>';
+            receiverPersonList.innerHTML = '';
 
             targetNames.filter(name => {
                 const info = staffDir[name];
-                const matchOrg = org === 'all' || (info && info.org === org);
-                const matchSearch = !searchTerm || name.toLowerCase().includes(searchTerm);
-                return matchOrg && matchSearch;
+                return org === 'all' || (info && info.org === org);
             }).forEach(name => {
-                receiverPersonFilter.innerHTML += `<option value="${name}">${name}</option>`;
+                receiverPersonList.innerHTML += `<option value="${name}">`;
             });
         }
 
@@ -326,26 +316,27 @@
 
         giverOrgFilter.addEventListener('change', (e) => {
             localStorage.setItem('pf_giverOrg', e.target.value);
+            giverPersonFilter.value = ''; // Reset person filter when org changes
             updateGiverPersonOptions();
             renderMatrix();
         });
 
         receiverOrgFilter.addEventListener('change', (e) => {
             localStorage.setItem('pf_receiverOrg', e.target.value);
+            receiverPersonFilter.value = ''; // Reset person filter when org changes
             updateReceiverPersonOptions();
             renderMatrix();
         });
 
-        giverPersonFilter.addEventListener('change', renderMatrix);
-        receiverPersonFilter.addEventListener('change', renderMatrix);
-
-        giverSearch.addEventListener('input', () => {
-            updateGiverPersonOptions();
-            renderMatrix();
+        // Debounced input event for person filters
+        let giverTimeout, receiverTimeout;
+        giverPersonFilter.addEventListener('input', () => {
+            clearTimeout(giverTimeout);
+            giverTimeout = setTimeout(renderMatrix, 300);
         });
-        receiverSearch.addEventListener('input', () => {
-            updateReceiverPersonOptions();
-            renderMatrix();
+        receiverPersonFilter.addEventListener('input', () => {
+            clearTimeout(receiverTimeout);
+            receiverTimeout = setTimeout(renderMatrix, 300);
         });
 
         async function init() {
@@ -418,14 +409,14 @@
         function renderMatrix() {
             const rOrg = receiverOrgFilter.value;
             const gOrg = giverOrgFilter.value;
-            const gPerson = giverPersonFilter.value;
-            const rPerson = receiverPersonFilter.value;
+            const gPerson = giverPersonFilter.value.trim(); // input field, empty = all
+            const rPerson = receiverPersonFilter.value.trim(); // input field, empty = all
             const container = document.getElementById('contentArea');
 
             // 1. Determine Columns (Receivers) based on Receiver Filter
             let displayTargets = targetNames.filter(name => {
-                // Person filter takes precedence
-                if (rPerson !== 'all') return name === rPerson;
+                // Person filter takes precedence (if not empty)
+                if (rPerson) return name === rPerson;
                 if (rOrg === 'all') return true;
                 const info = staffDir[name];
                 return info && info.org === rOrg;
@@ -457,12 +448,12 @@
                 const giver = row.giver;
                 const feedbacks = row.feedbacks;
 
-                // Filter Giver by Person (takes precedence)
-                if (gPerson !== 'all' && giver !== gPerson) return;
+                // Filter Giver by Person (takes precedence if not empty)
+                if (gPerson && giver !== gPerson) return;
 
-                // Filter Giver by Org
+                // Filter Giver by Org (only if no person filter)
                 const giverInfo = staffDir[giver];
-                if (gOrg !== 'all' && gPerson === 'all') {
+                if (gOrg !== 'all' && !gPerson) {
                     if (!giverInfo || giverInfo.org !== gOrg) return;
                 }
 
