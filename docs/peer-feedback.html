@@ -138,8 +138,8 @@
 
         async function loadFeedbackData() {
             try {
-                const res = await fetch('docs/feedback.csv');
-                if (!res.ok) throw new Error("無法讀取 docs/feedback.csv");
+                const res = await fetch('feedback.csv');
+                if (!res.ok) throw new Error("無法讀取 feedback.csv");
                 const text = await res.text();
                 const rows = parseCSV(text);
 
