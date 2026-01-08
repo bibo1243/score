@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>同仁互相回饋矩陣</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .page-container {
+            padding: 20px;
+            max-width: 100%;
+            overflow-x: auto;
+        }
+
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        select {
+            padding: 8px;
+            font-size: 16px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+        }
+
+        /* Matrix Table Styles */
+        .matrix-table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 14px;
+        }
+
+        .matrix-table th,
+        .matrix-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            min-width: 150px;
+            max-width: 300px;
+            vertical-align: top;
+        }
+
+        .matrix-table th {
+            background-color: #f4f6f8;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .matrix-table th.corner {
+            left: 0;
+            z-index: 20;
+        }
+
+        .matrix-table td.giver-name {
+            background-color: #f9f9f9;
+            font-weight: bold;
+            position: sticky;
+            left: 0;
+            z-index: 5;
+        }
+
+        .cell-content {
+            max-height: 150px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            font-size: 13px;
+        }
+
+        .empty-cell {
+            background-color: #fdfdfd;
+        }
+
+        .has-content {
+            background-color: #fff;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            font-size: 18px;
+            color: #666;
+        }
+
+        .nav-link {
+            text-decoration: none;
+            color: #4a90e2;
+            font-weight: bold;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .nav-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <div class="logo">同仁互相回饋矩陣</div>
+        <a href="index.html" class="nav-link">← 返回首頁</a>
+    </div>
+
+    <div class="page-container">
+        <div class="controls">
+            <label for="orgFilter">選擇機構：</label>
+            <select id="orgFilter">
+                <option value="all">全部</option>
+                <option value="基金會">基金會</option>
+                <option value="兒少之家">兒少之家</option>
+                <option value="少年家園">少年家園</option>
+                <option value="諮商所">諮商所</option>
+            </select>
+        </div>
+
+        <div id="contentArea">
+            <div class="loading">載入資料中...</div>
+        </div>
+    </div>
+
+    <script src="feedback-utils.js"></script>
+    <script>
+        let feedbackData = [];
+        let staffDir = {};
+        let feedbackHeaders = []; // Indices of feedback target columns
+        let targetNames = [];     // Names corresponding to those columns
+
+        async function init() {
+            staffDir = await loadStaffDirectory();
+            await loadFeedbackData();
+            renderMatrix();
+        }
+
+        async function loadFeedbackData() {
+            try {
+                const res = await fetch('docs/feedback.csv');
+                if (!res.ok) throw new Error("無法讀取 docs/feedback.csv");
+                const text = await res.text();
+                const rows = parseCSV(text);
+
+                if (rows.length < 2) return;
+
+                // Headers (Row 0)
+                const headers = rows[0].map(h => h.trim());
+
+                // Identify Feedback Columns: Any header that is a valid Staff Name
+                const allStaffNames = new Set(Object.keys(staffDir));
+
+                feedbackHeaders = [];
+                targetNames = [];
+
+                headers.forEach((h, idx) => {
+                    // Check if h is in staff names AND likely a feedback column (indices 4-50 range roughly)
+                    // Or simply if it's a known name.
+                    // Note: Filter out "姓名" (User Name) column.
+                    if (allStaffNames.has(h) && idx > 3) {
+                        feedbackHeaders.push(idx);
+                        targetNames.push(h);
+                    }
+                });
+
+                // Parse Data Rows
+                // We need: Giver Name, and their feedback for each Target.
+                const nameIdx = headers.indexOf('姓名');
+
+                feedbackData = rows.slice(1).map(r => {
+                    const giverName = r[nameIdx] || '未知';
+                    const feedbackMap = {}; // TargetName -> Content
+
+                    feedbackHeaders.forEach((colIdx, i) => {
+                        const target = targetNames[i];
+                        const content = r[colIdx] ? r[colIdx].trim() : '';
+                        if (content) {
+                            feedbackMap[target] = content;
+                        }
+                    });
+
+                    return {
+                        giver: giverName,
+                        feedbacks: feedbackMap
+                    };
+                }).filter(d => d.giver !== '未知');
+
+            } catch (e) {
+                document.getElementById('contentArea').innerHTML = `<div class="loading" style="color:red">載入失敗: ${e.message}</div>`;
+            }
+        }
+
+        function renderMatrix() {
+            const orgFilter = document.getElementById('orgFilter').value;
+            const container = document.getElementById('contentArea');
+
+            // 1. Determine Columns (Receivers) based on Filter
+            let displayTargets = targetNames.filter(name => {
+                if (orgFilter === 'all') return true;
+                const info = staffDir[name];
+                return info && info.org === orgFilter;
+            });
+
+            // Sort Targets by Org/Unit? Or just keep CSV order? CSV order is fine.
+
+            if (displayTargets.length === 0) {
+                container.innerHTML = '<div class="loading">無資料顯示</div>';
+                return;
+            }
+
+            // 2. Build Table
+            let html = '<table class="matrix-table">';
+
+            // Header Row
+            html += '<thead><tr>';
+            html += '<th class="corner">回饋者 \\以接受者</th>';
+            displayTargets.forEach(t => {
+                html += `<th>${t}</th>`;
+            });
+            html += '</tr></thead>';
+
+            // Body Rows (Givers)
+            // Show ALL givers? Or filter givers by Org too?
+            // "同仁互相回饋" usually implies looking at everyone.
+            // Let's show all givers who gave at least one feedback to the displayed targets.
+
+            html += '<tbody>';
+
+            feedbackData.forEach(row => {
+                const giver = row.giver;
+                const feedbacks = row.feedbacks;
+
+                // check if this giver gave any feedback to current targets
+                const hasRelevantFeedback = displayTargets.some(t => feedbacks[t]);
+
+                if (hasRelevantFeedback) {
+                    html += '<tr>';
+                    html += `<td class="giver-name">${giver}</td>`;
+
+                    displayTargets.forEach(target => {
+                        const text = feedbacks[target] || '';
+                        const cellClass = text ? 'has-content' : 'empty-cell';
+                        html += `<td class="${cellClass}">`;
+                        if (text) {
+                            html += `<div class="cell-content">${escapeHtml(text)}</div>`;
+                        }
+                        html += '</td>';
+                    });
+                    html += '</tr>';
+                }
+            });
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        document.getElementById('orgFilter').addEventListener('change', renderMatrix);
+
+        init();
+    </script>
+</body>
+
+</html>

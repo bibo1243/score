@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>自我考核表拆分</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .page-container {
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .nav-link {
+            text-decoration: none;
+            color: #4a90e2;
+            font-weight: bold;
+            margin-left: auto;
+        }
+
+        .employee-assessment-card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+            overflow: hidden;
+            border: 1px solid #eee;
+        }
+
+        .card-header {
+            background-color: #f8fbff;
+            padding: 15px 20px;
+            border-bottom: 1px solid #eaeaea;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .employee-name {
+            font-size: 20px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .employee-org {
+            color: #666;
+            font-size: 14px;
+            background: #eee;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+        .card-body {
+            padding: 20px;
+        }
+
+        .section-block {
+            margin-bottom: 25px;
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 10px;
+            border-left: 4px solid #4a90e2;
+            padding-left: 10px;
+        }
+
+        .qa-item {
+            margin-bottom: 15px;
+        }
+
+        .question {
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+
+        .answer {
+            background: #f9f9f9;
+            padding: 10px;
+            border-radius: 6px;
+            white-space: pre-wrap;
+            line-height: 1.6;
+            color: #333;
+        }
+
+        .score-section {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px dashed #ccc;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .score-label {
+            font-weight: bold;
+            font-size: 18px;
+            color: #d35400;
+        }
+
+        .score-input {
+            padding: 8px;
+            width: 100px;
+            font-size: 24px;
+            text-align: center;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            color: #d35400;
+            font-weight: bold;
+        }
+
+        .score-input:focus {
+            border-color: #d35400;
+            outline: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <div class="logo">自我考核表拆分檢視</div>
+        <a href="index.html" class="nav-link">← 返回首頁</a>
+    </div>
+
+    <div class="page-container">
+        <div class="controls">
+            <label for="orgFilter">選擇機構：</label>
+            <select id="orgFilter">
+                <option value="all">全部</option>
+                <option value="基金會">基金會</option>
+                <option value="兒少之家">兒少之家</option>
+                <option value="少年家園">少年家園</option>
+                <option value="諮商所">諮商所</option>
+            </select>
+        </div>
+
+        <div id="contentArea">
+            <div class="loading">載入資料中...</div>
+        </div>
+    </div>
+
+    <script src="feedback-utils.js"></script>
+    <script>
+        let assessmentData = [];
+        let staffDir = {};
+
+        // Define Data Mapping (Indices in CSV)
+        // 51: 自我成長
+        // 52: 專業成長
+        // 53: 專業表現-1 (目標)
+        // 54: 專業表現-2 (%)
+        // 55: 專業表現-3 (良好)
+        // 56: 專業表現-4 (做法)
+        const SECTIONS = [
+            {
+                title: "壹、自我成長",
+                items: [
+                    { q: "請以一個您的實際經驗/故事，分享您在慈馨家工作，所感受到對於您的自我成長？", colIndex: 51 }
+                ]
+            },
+            {
+                title: "貳、專業成長",
+                items: [
+                    { q: "請以一個您的實際經驗/故事，分享您在慈馨家工作，所感受到的專業成長？", colIndex: 52 }
+                ]
+            },
+            {
+                title: "参、專業表現",
+                items: [
+                    { q: "一、請為自己設定2〜4項關鍵成果（小目標）作為檢核。", colIndex: 53 },
+                    { q: "二、請以「百分比」自評前項關鍵成果（小目標）的完成率。", colIndex: 54 },
+                    { q: "三、請具體回饋自己表現良好的部分。", colIndex: 55 },
+                    { q: "四、請檢視自己的表現，設定接續半年可持續提升自己的具體做法。", colIndex: 56 }
+                ]
+            }
+        ];
+
+        async function init() {
+            staffDir = await loadStaffDirectory();
+            await loadAssessmentData();
+            renderList();
+        }
+
+        async function loadAssessmentData() {
+            try {
+                const res = await fetch('docs/feedback.csv');
+                if (!res.ok) throw new Error("無法讀取 docs/feedback.csv");
+                const text = await res.text();
+                const rows = parseCSV(text);
+
+                if (rows.length < 2) return;
+
+                const headers = rows[0].map(h => h.trim());
+                const nameIdx = headers.indexOf('姓名');
+
+                // Parse rows
+                assessmentData = rows.slice(1).map(r => {
+                    const name = r[nameIdx] || '未知';
+                    const employeeInfo = staffDir[name] || { org: '未分類' };
+
+                    // Extract answers
+                    const answers = {};
+                    SECTIONS.forEach(sec => {
+                        sec.items.forEach(item => {
+                            answers[item.colIndex] = r[item.colIndex] || '';
+                        });
+                    });
+
+                    return {
+                        name: name,
+                        org: employeeInfo.org,
+                        answers: answers
+                    };
+                }).filter(d => d.name !== '未知');
+
+            } catch (e) {
+                document.getElementById('contentArea').innerHTML = `<div class="loading" style="color:red">載入失敗: ${e.message}</div>`;
+            }
+        }
+
+        function renderList() {
+            const orgFilter = document.getElementById('orgFilter').value;
+            const container = document.getElementById('contentArea');
+
+            const filtered = assessmentData.filter(d => {
+                if (orgFilter === 'all') return true;
+                return d.org === orgFilter;
+            });
+
+            if (filtered.length === 0) {
+                container.innerHTML = '<div class="loading">無資料顯示</div>';
+                return;
+            }
+
+            let html = '';
+            filtered.forEach(emp => {
+                // Get saved score
+                const scoreKey = `assessment_score_${emp.name}`;
+                const savedScore = localStorage.getItem(scoreKey) || '';
+
+                html += `
+                <div class="employee-assessment-card">
+                    <div class="card-header">
+                        <div class="employee-name">${emp.name}</div>
+                        <div class="employee-org">${emp.org}</div>
+                    </div>
+                    <div class="card-body">
+                `;
+
+                SECTIONS.forEach(sec => {
+                    html += `<div class="section-block">
+                        <div class="section-title">${sec.title}</div>`;
+
+                    sec.items.forEach(item => {
+                        const ans = emp.answers[item.colIndex];
+                        if (ans) {
+                            html += `
+                            <div class="qa-item">
+                                <div class="question">${item.q}</div>
+                                <div class="answer">${escapeHtml(ans)}</div>
+                            </div>`;
+                        }
+                    });
+
+                    html += `</div>`;
+                });
+
+                // Score Input
+                html += `
+                    <div class="score-section">
+                        <span class="score-label">考核評分：</span>
+                        <input type="number" class="score-input" value="${savedScore}" 
+                            oninput="saveScore('${emp.name}', this.value)" placeholder="分數">
+                    </div>
+                `;
+
+                html += `</div></div>`;
+            });
+
+            container.innerHTML = html;
+        }
+
+        // Save score to LocalStorage
+        window.saveScore = function (name, val) {
+            const key = `assessment_score_${name}`;
+            localStorage.setItem(key, val);
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        document.getElementById('orgFilter').addEventListener('change', renderList);
+
+        init();
+    </script>
+</body>
+
+</html>
