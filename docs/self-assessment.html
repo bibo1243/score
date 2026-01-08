@@ -462,11 +462,11 @@
                                 <div class="bonus-input-group">
                                     <span class="bonus-label">加分 (Max 3)</span>
                                     <input type="number" class="bonus-input" id="bonus-${index}" 
-                                        min="0" max="3" step="0.1"
+                                        min="0" max="3" step="1"
                                         value="${savedBonus}" 
                                         oninput="updateBonus('${emp.name}', ${index}, ${baseScore}, this.value)">
                                 </div>
-                                <div class="raters-list">請根據左側自我考核內容，給予適當加分。</div>
+                                <div class="raters-list">請根據左側自我考核內容，給予適當加分（限整數）。</div>
                                 
                                 <div class="final-score-row">
                                     <span class="final-score-label">最終總分</span>
@@ -482,15 +482,13 @@
         }
 
         window.updateBonus = function (name, idx, baseScore, val) {
-            let numVal = parseFloat(val);
+            let numVal = parseInt(val, 10); // Enforce Integer
             if (isNaN(numVal)) numVal = 0;
 
-            // Limit to 3 (Allow decimal?) Yes step 0.1
-            // User requested "Max 3".
+            // Limit to 3 (Integers 0, 1, 2, 3)
             if (numVal > 3) {
                 numVal = 3;
                 document.getElementById(`bonus-${idx}`).value = 3;
-                // Optional: alert?
             }
             if (numVal < 0) {
                 numVal = 0;
@@ -500,7 +498,8 @@
             // Save
             localStorage.setItem(`assessment_bonus_${name}`, numVal);
 
-            // Update UI
+            // Update UI (final score likely float + int = float)
+            // Keep final score formatted neatly
             const final = (baseScore + numVal).toFixed(1);
             document.getElementById(`final-${idx}`).innerText = final;
         }
