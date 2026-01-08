@@ -12,25 +12,50 @@
             --row-height: 150px;
         }
 
-        /* Sticky Header Fix */
-        .page-container {
-            padding: 20px;
-            height: calc(100vh - 120px);
-            overflow: auto;
-            max-width: 100%;
+        /* Full Page Flex Layout */
+        body {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+            /* Prevent body scroll */
+            margin: 0;
+        }
+
+        .header {
+            flex: 0 0 auto;
+            /* Fixed header */
         }
 
         .controls {
-            margin-bottom: 20px;
+            flex: 0 0 auto;
+            /* Fixed controls bar */
+            padding: 15px 20px;
+            background: #f5f5f5;
+            border-bottom: 1px solid #ddd;
             display: flex;
             gap: 20px;
             align-items: center;
             flex-wrap: wrap;
-            background: #f5f5f5;
-            padding: 10px;
-            border-radius: 8px;
+            z-index: 50;
+            /* Above table content */
+            margin-bottom: 0;
+            /* Attach to bottom */
         }
 
+        .page-container {
+            flex: 1 1 auto;
+            /* Fill remaining space */
+            overflow: auto;
+            /* Scrollable area */
+            padding: 20px;
+            max-width: 100%;
+            height: auto;
+            /* Let flex handle height */
+            z-index: 10;
+        }
+
+        /* ... existing styles ... */
         .control-group {
             display: flex;
             align-items: center;
@@ -57,6 +82,7 @@
             table-layout: fixed;
         }
 
+        /* ... (Keep existing table styles) ... */
         .matrix-table th,
         .matrix-table td {
             border: 1px solid #ddd;
@@ -67,7 +93,6 @@
             background-color: #fff;
         }
 
-        /* Sticky Top Header */
         .matrix-table thead {
             position: sticky;
             top: 0;
@@ -84,10 +109,8 @@
             text-overflow: ellipsis;
             resize: horizontal;
             overflow: auto;
-            /* Columns resizable */
         }
 
-        /* Sticky Left Column */
         .matrix-table td.giver-name {
             position: sticky;
             left: 0;
@@ -97,10 +120,8 @@
             box-shadow: 1px 0 0 #ddd;
             width: 120px;
             min-width: 120px;
-            /* Fixed width for name col */
         }
 
-        /* Hover Effect */
         .matrix-table tbody tr:hover td {
             background-color: #e6f7ff !important;
             border-top: 1px solid #1890ff;
@@ -111,7 +132,6 @@
             background-color: #bae7ff !important;
         }
 
-        /* Corner Cell (Top-Left) needs both */
         .matrix-table th.corner {
             left: 0;
             z-index: 30;
@@ -125,7 +145,6 @@
             white-space: pre-wrap;
             font-size: 13px;
             resize: vertical;
-            /* Allow individual height resize */
             overflow: auto;
         }
 
@@ -164,30 +183,43 @@
         <a href="index.html" class="nav-link">← 返回首頁</a>
     </div>
 
-    <div class="page-container">
-        <div class="controls">
-            <div class="control-group">
-                <label for="orgFilter">選擇機構：</label>
-                <select id="orgFilter">
-                    <option value="all">全部</option>
-                    <option value="基金會">基金會</option>
-                    <option value="兒少之家">兒少之家</option>
-                    <option value="少年家園">少年家園</option>
-                    <option value="諮商所">諮商所</option>
-                </select>
-            </div>
-
-            <div class="control-group">
-                <label for="widthRange">欄寬：</label>
-                <input type="range" id="widthRange" min="150" max="600" value="250" step="10">
-            </div>
-
-            <div class="control-group">
-                <label for="heightRange">列高：</label>
-                <input type="range" id="heightRange" min="50" max="500" value="150" step="10">
-            </div>
+    <!-- Controls Moved Outside -->
+    <div class="controls">
+        <div class="control-group">
+            <label for="giverOrgFilter">回饋者機構：</label>
+            <select id="giverOrgFilter">
+                <option value="all">全部</option>
+                <option value="基金會">基金會</option>
+                <option value="兒少之家">兒少之家</option>
+                <option value="少年家園">少年家園</option>
+                <option value="諮商所">諮商所</option>
+            </select>
         </div>
 
+        <div class="control-group">
+            <label for="receiverOrgFilter">受評者機構：</label>
+            <select id="receiverOrgFilter">
+                <option value="all">全部</option>
+                <option value="基金會">基金會</option>
+                <option value="兒少之家">兒少之家</option>
+                <option value="少年家園">少年家園</option>
+                <option value="諮商所">諮商所</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label for="widthRange">欄寬：</label>
+            <input type="range" id="widthRange" min="150" max="600" value="250" step="10">
+        </div>
+
+        <div class="control-group">
+            <label for="heightRange">列高：</label>
+            <input type="range" id="heightRange" min="50" max="500" value="150" step="10">
+        </div>
+    </div>
+
+    <div class="page-container">
+        <!-- Content Area -->
         <div id="contentArea">
             <div class="loading">載入資料中...</div>
         </div>
@@ -203,16 +235,53 @@
         // UI Controls
         const widthRange = document.getElementById('widthRange');
         const heightRange = document.getElementById('heightRange');
+        const giverOrgFilter = document.getElementById('giverOrgFilter');
+        const receiverOrgFilter = document.getElementById('receiverOrgFilter');
 
+        // Load Settings from LocalStorage
+        function loadSettings() {
+            const savedWidth = localStorage.getItem('pf_colWidth');
+            const savedHeight = localStorage.getItem('pf_rowHeight');
+            const savedGiverOrg = localStorage.getItem('pf_giverOrg');
+            const savedReceiverOrg = localStorage.getItem('pf_receiverOrg');
+
+            if (savedWidth) {
+                widthRange.value = savedWidth;
+                document.documentElement.style.setProperty('--col-width', savedWidth + 'px');
+            }
+            if (savedHeight) {
+                heightRange.value = savedHeight;
+                document.documentElement.style.setProperty('--row-height', savedHeight + 'px');
+            }
+            if (savedGiverOrg) giverOrgFilter.value = savedGiverOrg;
+            if (savedReceiverOrg) receiverOrgFilter.value = savedReceiverOrg;
+        }
+
+        // Event Listeners with Persistence
         widthRange.addEventListener('input', (e) => {
-            document.documentElement.style.setProperty('--col-width', e.target.value + 'px');
+            const val = e.target.value;
+            document.documentElement.style.setProperty('--col-width', val + 'px');
+            localStorage.setItem('pf_colWidth', val);
         });
 
         heightRange.addEventListener('input', (e) => {
-            document.documentElement.style.setProperty('--row-height', e.target.value + 'px');
+            const val = e.target.value;
+            document.documentElement.style.setProperty('--row-height', val + 'px');
+            localStorage.setItem('pf_rowHeight', val);
+        });
+
+        giverOrgFilter.addEventListener('change', (e) => {
+            localStorage.setItem('pf_giverOrg', e.target.value);
+            renderMatrix();
+        });
+
+        receiverOrgFilter.addEventListener('change', (e) => {
+            localStorage.setItem('pf_receiverOrg', e.target.value);
+            renderMatrix();
         });
 
         async function init() {
+            loadSettings();
             staffDir = await loadStaffDirectory();
             await loadFeedbackData();
             renderMatrix();
@@ -274,20 +343,19 @@
         }
 
         function renderMatrix() {
-            const orgFilter = document.getElementById('orgFilter').value;
+            const rOrg = receiverOrgFilter.value;
+            const gOrg = giverOrgFilter.value;
             const container = document.getElementById('contentArea');
 
-            // 1. Determine Columns (Receivers) based on Filter
+            // 1. Determine Columns (Receivers) based on Receiver Filter
             let displayTargets = targetNames.filter(name => {
-                if (orgFilter === 'all') return true;
+                if (rOrg === 'all') return true;
                 const info = staffDir[name];
-                return info && info.org === orgFilter;
+                return info && info.org === rOrg;
             });
 
-            // Sort Targets by Org/Unit? Or just keep CSV order? CSV order is fine.
-
             if (displayTargets.length === 0) {
-                container.innerHTML = '<div class="loading">無資料顯示</div>';
+                container.innerHTML = '<div class="loading">無相符的受評者資料</div>';
                 return;
             }
 
@@ -296,27 +364,36 @@
 
             // Header Row
             html += '<thead><tr>';
-            html += '<th class="corner">回饋者 \\以接受者</th>';
+            html += '<th class="corner">回饋者 \\ 受評者</th>';
             displayTargets.forEach(t => {
                 html += `<th>${t}</th>`;
             });
             html += '</tr></thead>';
 
-            // Body Rows (Givers)
-            // Show ALL givers? Or filter givers by Org too?
-            // "同仁互相回饋" usually implies looking at everyone.
-            // Let's show all givers who gave at least one feedback to the displayed targets.
-
             html += '<tbody>';
+
+            let rowCount = 0;
+            // Get list of Givers. Default order is CSV order (which groups by submission time).
+            // Maybe sort givers? CSV order is usually fine.
 
             feedbackData.forEach(row => {
                 const giver = row.giver;
                 const feedbacks = row.feedbacks;
 
-                // check if this giver gave any feedback to current targets
+                // Filter Giver by Org
+                const giverInfo = staffDir[giver];
+                if (gOrg !== 'all') {
+                    // Check giver org. 
+                    // Note: If giver name not in staffDir (e.g. name typo in CSV), it might be skipped if we strictly filter.
+                    // But 'all' shows everything.
+                    if (!giverInfo || giverInfo.org !== gOrg) return;
+                }
+
+                // Check if this giver gave any feedback to current DISPLAYED targets
                 const hasRelevantFeedback = displayTargets.some(t => feedbacks[t]);
 
                 if (hasRelevantFeedback) {
+                    rowCount++;
                     html += '<tr>';
                     html += `<td class="giver-name">${giver}</td>`;
 
@@ -333,8 +410,14 @@
                 }
             });
 
+            if (rowCount === 0) {
+                html = '<tr><td colspan="' + (displayTargets.length + 1) + '" style="padding:20px;text-align:center;">此篩選組合無回饋資料</td></tr>';
+            }
+
             html += '</tbody></table>';
-            container.innerHTML = html;
+
+            if (rowCount === 0 && displayTargets.length === 0) container.innerHTML = '<div class="loading">無資料</div>'; // Covered above
+            else container.innerHTML = html;
         }
 
         function escapeHtml(text) {
