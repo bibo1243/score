@@ -7,10 +7,14 @@
     <title>同仁互相回饋矩陣</title>
     <link rel="stylesheet" href="style.css">
     <style>
+        /* Sticky Header Fix */
         .page-container {
             padding: 20px;
+            height: calc(100vh - 100px);
+            /* Adjust based on your header height */
+            overflow: auto;
+            /* Scroll happens here */
             max-width: 100%;
-            overflow-x: auto;
         }
 
         .controls {
@@ -29,8 +33,9 @@
 
         /* Matrix Table Styles */
         .matrix-table {
-            border-collapse: collapse;
-            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            width: max-content;
             font-size: 14px;
         }
 
@@ -41,26 +46,41 @@
             min-width: 150px;
             max-width: 300px;
             vertical-align: top;
+            background-color: #fff;
+            /* Ensure bg so content doesn't show through */
         }
 
-        .matrix-table th {
-            background-color: #f4f6f8;
+        /* Sticky Top Header */
+        .matrix-table thead {
             position: sticky;
             top: 0;
-            z-index: 10;
-        }
-
-        .matrix-table th.corner {
-            left: 0;
             z-index: 20;
         }
 
+        .matrix-table th {
+            position: sticky;
+            top: 0;
+            background-color: #f4f6f8;
+            z-index: 10;
+            box-shadow: 0 1px 0 #ddd;
+            /* Bottom border fix */
+        }
+
+        /* Sticky Left Column */
         .matrix-table td.giver-name {
-            background-color: #f9f9f9;
-            font-weight: bold;
             position: sticky;
             left: 0;
+            background-color: #f9f9f9;
+            font-weight: bold;
             z-index: 5;
+            box-shadow: 1px 0 0 #ddd;
+            /* Right border fix */
+        }
+
+        /* Corner Cell (Top-Left) needs both */
+        .matrix-table th.corner {
+            left: 0;
+            z-index: 30;
         }
 
         .cell-content {
