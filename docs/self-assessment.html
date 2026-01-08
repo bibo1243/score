@@ -502,12 +502,37 @@
 
         function getDetailedBreakdown(scores) {
             if (!scores.average_score) return "尚無詳細評分資料";
-            // Construct a mini breakdown string
-            let parts = [];
-            if (scores.cat1_avg) parts.push(`<div><strong>主管 (${scores.cat1_weight || '50%'})</strong>: ${scores.cat1_avg}</div>`);
-            if (scores.cat2_avg) parts.push(`<div><strong>同仁 (${scores.cat2_weight || '50%'})</strong>: ${scores.cat2_avg}</div>`);
-            if (scores.subordinate_avg && scores.subordinate_avg > 0) parts.push(`<div><strong>下屬 (10%)</strong>: ${scores.subordinate_avg}</div>`);
-            return parts.join('');
+            // Show Cat1, Cat2, Cat3, Total from Supabase data
+            // API returns: cat1_rounded, cat2_rounded, cat3_rounded, average_score
+            const cat1 = scores.cat1_rounded !== undefined ? scores.cat1_rounded : '-';
+            const cat2 = scores.cat2_rounded !== undefined ? scores.cat2_rounded : '-';
+            const cat3 = scores.cat3_rounded !== undefined ? scores.cat3_rounded : '-';
+            const total = scores.average_score !== undefined ? scores.average_score : '-';
+
+            return `
+                <div style="display:flex; justify-content:space-between; gap:10px; text-align:center;">
+                    <div style="flex:1; background:#fff; padding:10px; border-radius:8px; border:1px solid #e2e8f0;">
+                        <div style="font-size:11px; color:#94a3b8; margin-bottom:4px;">第一大類</div>
+                        <div style="font-size:18px; font-weight:bold; color:#4f46e5;">${cat1}</div>
+                        <div style="font-size:10px; color:#cbd5e1;">(滿分40)</div>
+                    </div>
+                    <div style="flex:1; background:#fff; padding:10px; border-radius:8px; border:1px solid #e2e8f0;">
+                        <div style="font-size:11px; color:#94a3b8; margin-bottom:4px;">第二大類</div>
+                        <div style="font-size:18px; font-weight:bold; color:#10b981;">${cat2}</div>
+                        <div style="font-size:10px; color:#cbd5e1;">(滿分30)</div>
+                    </div>
+                    <div style="flex:1; background:#fff; padding:10px; border-radius:8px; border:1px solid #e2e8f0;">
+                        <div style="font-size:11px; color:#94a3b8; margin-bottom:4px;">第三大類</div>
+                        <div style="font-size:18px; font-weight:bold; color:#f59e0b;">${cat3}</div>
+                        <div style="font-size:10px; color:#cbd5e1;">(滿分30)</div>
+                    </div>
+                </div>
+                <div style="margin-top:10px; text-align:center; padding:8px; background:#fff; border-radius:8px; border:1px solid #e2e8f0;">
+                    <span style="font-size:12px; color:#64748b;">總分：</span>
+                    <span style="font-size:20px; font-weight:bold; color:#1e293b;">${total}</span>
+                    <span style="font-size:11px; color:#94a3b8;"> / 100</span>
+                </div>
+            `;
         }
 
         window.updateBonus = async function (name, idx, baseScore, val) {
