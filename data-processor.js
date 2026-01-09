@@ -231,32 +231,6 @@ function calculateBasicScores(rawScores, staff) {
         const cat2Rounded = customRound(cat2Avg);
         const cat3Rounded = customRound(cat3Avg);
 
-        // Calculate sub-averages for breakdown display
-        function getGroupAvg(list) {
-            if (list.length === 0) return 0;
-            return Math.round(list.reduce((s, r) => s + r.total, 0) / list.length);
-        }
-
-        const breakdown = [];
-        if (managerRaters.length > 0) {
-            breakdown.push({
-                desc: '主管',
-                weight: 50,
-                avg: getGroupAvg(managerRaters),
-                count: managerRaters.length,
-                raters: managerRaters.map(r => r.name)
-            });
-        }
-        if (colleagueRaters.length > 0) {
-            breakdown.push({
-                desc: '其他同仁',
-                weight: 50,
-                avg: getGroupAvg(colleagueRaters),
-                count: colleagueRaters.length,
-                raters: colleagueRaters.map(r => r.name)
-            });
-        }
-
         basicScores[name] = {
             name: name,
             average_score: cat1Rounded + cat2Rounded + cat3Rounded,
@@ -268,9 +242,7 @@ function calculateBasicScores(rawScores, staff) {
             unit: employeeMeta.unit || '',
             section: employeeMeta.section || '',
             position: employeeMeta.position || '',
-            supervisor: employeeMeta.supervisor || '',
-            breakdown: breakdown,
-            is_weighted: true // Force display of breakdown
+            supervisor: employeeMeta.supervisor || ''
         };
     }
     return basicScores;

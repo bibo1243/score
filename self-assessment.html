@@ -387,9 +387,9 @@
             assessmentData.filter(d => {
                 const matchOrg = orgVal === 'all' || d.org === orgVal;
                 const matchUnit = unitVal === 'all' || d.unit === unitVal;
-                // Exclude managers from list
-                const MANAGERS_TO_EXCLUDE = ['李冠葦', '廖振杉', '廖慧雯', '楊顗帆', '陳淑錡', '陳宛妤', '鍾宜珮', '高靜華', '白梅芳'];
-                return matchOrg && matchUnit && !MANAGERS_TO_EXCLUDE.includes(d.name);
+                // Exclude managers from list - RESTORED FOR ALL
+                // const MANAGERS_TO_EXCLUDE = ['李冠葦', '廖振杉', '廖慧雯', '楊顗帆', '陳淑錡', '陳宛妤', '鍾宜珮', '高靜華', '白梅芳'];
+                return matchOrg && matchUnit;
             }).forEach(d => {
                 nameList.innerHTML += `<option value="${d.name}">`;
             });
@@ -493,12 +493,12 @@
             const nameFilter = document.getElementById('nameFilter').value.trim();
             const container = document.getElementById('contentArea');
 
-            // Institution heads and managers to exclude
-            const MANAGERS_TO_EXCLUDE = ['李冠葦', '廖振杉', '廖慧雯', '楊顗帆', '陳淑錡', '陳宛妤', '鍾宜珮', '高靜華', '白梅芳'];
+            // Institution heads and managers to exclude - RESTORED FOR ALL
+            // const MANAGERS_TO_EXCLUDE = ['李冠葦', '廖振杉', '廖慧雯', '楊顗帆', '陳淑錡', '陳宛妤', '鍾宜珮', '高靜華', '白梅芳'];
 
             let filtered = assessmentData.filter(d => {
-                // Skip managers
-                if (MANAGERS_TO_EXCLUDE.includes(d.name)) return false;
+                // Skip managers - REMOVED
+                // if (MANAGERS_TO_EXCLUDE.includes(d.name)) return false;
 
                 // Org filter
                 if (orgFilter !== 'all' && d.org !== orgFilter) return false;
