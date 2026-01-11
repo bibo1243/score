@@ -1,39 +1,765 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-TW">
 
 <head>
     <meta charset="UTF-8">
-    <title>評分關係管理系統</title>
-    <link rel="stylesheet" href="rating-management.css">
-    <script src="https://d3js.org/d3.v7.min.js"></script>
-    <script src="data-processor.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>評分規則管理系統</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-light: #e0e7ff;
+            --secondary: #64748b;
+            --bg: #f8fafc;
+            --surface: #ffffff;
+            --border: #e2e8f0;
+            --text: #0f172a;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Sidebar Styles */
+        .sidebar {
+            width: 280px;
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .sidebar-header {
+            padding: 15px;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface);
+        }
+
+        .search-box {
+            position: relative;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 8px 30px 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            box-sizing: border-box;
+        }
+
+        .search-box i {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--secondary);
+        }
+
+        .org-tree {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        .tree-node {
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            font-size: 14px;
+            color: #334155;
+            margin-bottom: 2px;
+        }
+
+        .tree-node:hover {
+            background-color: #f1f5f9;
+        }
+
+        .tree-node.active {
+            background-color: var(--primary-light);
+            color: var(--primary);
+            font-weight: 500;
+        }
+
+        .tree-node i {
+            margin-right: 8px;
+            font-size: 12px;
+            width: 16px;
+            text-align: center;
+        }
+
+        /* Main Content Styles */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .top-bar {
+            height: 60px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 20px;
+        }
+
+        .page-title {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #4338ca;
+        }
+
+        .btn-outline {
+            background: white;
+            border: 1px solid var(--border);
+            color: var(--text);
+        }
+
+        .btn-outline:hover {
+            background: #f8fafc;
+        }
+
+        .editor-container {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            justify-content: center;
+        }
+
+        .editor-panel {
+            width: 100%;
+            max-width: 800px;
+        }
+
+        .config-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1e293b;
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        .input-label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--secondary);
+            margin-bottom: 5px;
+        }
+
+        .range-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        input[type="range"] {
+            flex: 1;
+        }
+
+        .percentage-display {
+            width: 40px;
+            text-align: right;
+            font-weight: bold;
+            color: var(--primary);
+        }
+
+        .tag-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 8px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            min-height: 40px;
+            background: #fff;
+        }
+
+        .tag {
+            background: var(--primary-light);
+            color: var(--primary);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .tag i {
+            cursor: pointer;
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+        }
+
+        .tag i:hover {
+            background: rgba(0, 0, 0, 0.1);
+        }
+
+        .subordinate-rule {
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 10px;
+            background: #fafafa;
+        }
+
+        .rule-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .select-input,
+        .text-input {
+            padding: 6px 10px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 14px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: var(--secondary);
+            margin-top: 100px;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            width: 400px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+    </style>
 </head>
 
 <body>
-    <div class="header">
-        <div class="logo">評分關係管理系統</div>
-        <a href="index.html" class="nav-link">← 返回首頁</a>
-    </div>
-    <div id="authContainer" class="auth-container">
-        <h2>請輸入密碼以進入管理頁面</h2>
-        <input type="password" id="adminPassword" placeholder="密碼" />
-        <button id="loginBtn">登入</button>
-        <p id="errorMsg" class="error-msg"></p>
-    </div>
-    <div id="managementApp" class="app hidden">
-        <div id="unitFilters" class="filters">
-            <label for="orgSelect">機構：</label>
-            <select id="orgSelect">
-                <option value="all">全部</option>
-            </select>
-            <label for="unitSelect">單位：</label>
-            <select id="unitSelect">
-                <option value="all">全部</option>
-            </select>
+
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h3>評分管理系統</h3>
+            <div class="search-box">
+                <input type="text" id="treeSearch" placeholder="搜尋姓名或單位...">
+                <i class="fa-solid fa-search"></i>
+            </div>
         </div>
-        <div id="employeeContainer" class="employee-container"></div>
+        <div class="org-tree" id="orgTree">
+            <!-- Tree content will be generated here -->
+        </div>
     </div>
-    <script src="rating-management.js"></script>
+
+    <div class="main-content">
+        <div class="top-bar">
+            <div class="page-title" id="pageTitle">請選擇左側員工進行設定</div>
+            <div class="actions">
+                <button class="btn btn-outline" onclick="exportJson()">
+                    <i class="fa-solid fa-download"></i> 下載設定檔
+                </button>
+                <button class="btn btn-primary" onclick="saveActiveEmployee()">
+                    <i class="fa-solid fa-save"></i> 暫存設定
+                </button>
+            </div>
+        </div>
+
+        <div class="editor-container" id="editorContainer">
+            <div class="empty-state">
+                <i class="fa-solid fa-user-gear" style="font-size: 48px; margin-bottom: 20px;"></i>
+                <p>請從左側組織樹選擇一位員工或主管，<br>開始設定其評分權重與規則。</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Person Modal -->
+    <div id="addPersonModal" class="modal">
+        <div class="modal-content">
+            <h3 id="modalTitle">新增人員</h3>
+            <input type="text" id="personSearch" class="text-input" placeholder="搜尋姓名..." style="margin-bottom: 10px;">
+            <div id="personList" style="max-height: 200px; overflow-y: auto; border: 1px solid #eee;">
+                <!-- List -->
+            </div>
+            <div style="margin-top: 15px; display: flex; justify-content: flex-end; gap: 10px;">
+                <button class="btn btn-outline" onclick="closeModal()">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ratingRules = {};
+        let employeeData = [];
+        let activeEmployeeName = null;
+        let allEmployees = [];
+        let currentConfig = null;
+
+        // -- Initialization --
+        async function init() {
+            try {
+                // 1. Load Rules
+                const rulesRes = await fetch('rating_rules.json');
+                ratingRules = await rulesRes.json();
+                if (!ratingRules.employees) ratingRules.employees = {};
+
+                // 2. Load Employee Data
+                const empRes = await fetch('employee_data.json');
+                employeeData = await empRes.json();
+                allEmployees = employeeData.map(e => e.name);
+
+                renderTree();
+            } catch (e) {
+                console.error("Failed to init", e);
+                alert("載入資料失敗，請確認 rating_rules.json 和 employee_data.json 存在");
+            }
+        }
+
+        // -- Tree Rendering --
+        function renderTree() {
+            const treeContainer = document.getElementById('orgTree');
+            const search = document.getElementById('treeSearch').value.toLowerCase();
+            treeContainer.innerHTML = '';
+
+            const structure = {};
+            employeeData.forEach(e => {
+                const org = e.org || '未分類';
+                const unit = e.unit || '未分類';
+                if (!structure[org]) structure[org] = {};
+                if (!structure[org][unit]) structure[org][unit] = [];
+                structure[org][unit].push(e);
+            });
+
+            Object.keys(structure).sort().forEach(org => {
+                const orgDiv = createTreeNode(`org-${org}`, org, 'building', true);
+                treeContainer.appendChild(orgDiv);
+
+                const orgChildren = document.createElement('div');
+                orgChildren.style.paddingLeft = '15px';
+
+                Object.keys(structure[org]).sort().forEach(unit => {
+                    const unitDiv = createTreeNode(`unit-${org}-${unit}`, unit, 'sitemap', true);
+                    orgChildren.appendChild(unitDiv);
+
+                    const unitChildren = document.createElement('div');
+                    unitChildren.style.paddingLeft = '15px';
+
+                    structure[org][unit].forEach(emp => {
+                        if (search && !emp.name.toLowerCase().includes(search) && !unit.toLowerCase().includes(search)) return;
+                        const empDiv = createTreeNode(`emp-${emp.name}`, emp.name, 'user', false);
+                        empDiv.onclick = () => loadEmployeeEditor(emp.name);
+                        unitChildren.appendChild(empDiv);
+                    });
+                    if (unitChildren.children.length > 0) orgChildren.appendChild(unitChildren);
+                });
+                treeContainer.appendChild(orgChildren);
+            });
+        }
+
+        function createTreeNode(id, text, icon, isFolder) {
+            const div = document.createElement('div');
+            div.className = 'tree-node';
+            div.innerHTML = `<i class="fa-solid fa-${icon}"></i> ${text}`;
+            return div;
+        }
+
+        // -- Editor Logic --
+        function loadEmployeeEditor(name) {
+            activeEmployeeName = name;
+            document.querySelectorAll('.tree-node').forEach(el => el.classList.remove('active'));
+            // Highlight logic omitted for brevity
+
+            document.getElementById('pageTitle').innerText = `設定：${name}`;
+
+            const src = ratingRules.employees[name] || ratingRules.special_rules?.[name] || {
+                manager_weight: 0.5,
+                subordinate_rules: [],
+                managers: []
+            };
+
+            currentConfig = JSON.parse(JSON.stringify(src));
+            if (!currentConfig.managers) currentConfig.managers = [];
+            if (!currentConfig.subordinate_rules) currentConfig.subordinate_rules = [];
+            if (currentConfig.manager_weight === undefined) currentConfig.manager_weight = 0.5;
+
+            window.updateCurrentMgrWeight = (val) => {
+                currentConfig.manager_weight = parseFloat(val);
+                document.getElementById('mgrWeightDisp').innerText = Math.round(val * 100) + '%';
+                document.getElementById('peerWeightDisp').innerText = Math.round((1 - val) * 100) + '%';
+            };
+
+            renderEditor();
+        }
+
+        function renderEditor() {
+            const panel = document.getElementById('editorContainer');
+
+            // Calculate weights
+            const mgrWeight = currentConfig.manager_weight * 100;
+
+            // Calculate total subordinate rules weight
+            let subWeightRaw = 0;
+            const subMemberSet = new Set();
+            if (currentConfig.subordinate_rules && currentConfig.subordinate_rules.length > 0) {
+                subWeightRaw = currentConfig.subordinate_rules.reduce((sum, r) => sum + r.weight, 0);
+                // Collect sub members to exclude from peers
+                currentConfig.subordinate_rules.forEach(r => r.members.forEach(m => subMemberSet.add(m)));
+            }
+            const subWeightPercent = Math.round(subWeightRaw * 100);
+
+            // Peer weight is remainder
+            const peerWeightRaw = 100 - mgrWeight;
+            const effectivePeerWeight = 100 - mgrWeight - subWeightPercent;
+
+            // Generate Managers HTML tags
+            const mgrSet = new Set(currentConfig.managers || []);
+            const managersHtml = (currentConfig.managers && currentConfig.managers.length > 0)
+                ? currentConfig.managers.map(m => `<span class="tag">${m} <i class="fa-solid fa-times" onclick="removeManager('${m}')"></i></span>`).join('')
+                : '<span style="color:#999; font-size:12px;">(未指定，將使用預設邏輯)</span>';
+
+            // Identify Peers (Actual raters minus managers minus subordinates)
+            let peerHtml = '<span style="color:#999; font-size:12px;">(暫無資料)</span>';
+            const empData = employeeData.find(e => e.name === activeEmployeeName);
+            if (empData && empData.raters) {
+                const peers = empData.raters.filter(r => !mgrSet.has(r.name) && !subMemberSet.has(r.name)).map(r => r.name);
+                if (peers.length > 0) {
+                    peerHtml = peers.map(p => `<span class="tag" style="background:#f1f5f9; color:#475569; border:1px solid #e2e8f0; cursor:default;">${p}</span>`).join('');
+                } else {
+                    peerHtml = '<span style="color:#999; font-size:12px;">(目前無其他同仁評分)</span>';
+                }
+            }
+
+            // Render Editor HTML
+            panel.innerHTML = `
+                <div class="editor-header">
+                    <h2>設定：${activeEmployeeName}</h2>
+                    <button class="btn btn-outline" onclick="saveActiveEmployee()">
+                        <i class="fa-solid fa-floppy-disk"></i> 暫存設定
+                    </button>
+                    <!-- Download button logic is in top bar -->
+                </div>
+
+                <div class="editor-panel">
+                    <!-- 1. Manager Weight -->
+                    <div class="config-card">
+                        <div class="card-header"><div class="card-title">基本權重設定</div></div>
+                        <div class="input-group">
+                            <label class="input-label" style="display:flex; justify-content:space-between;">
+                                <span>主管評分佔比 (Manager Weight)</span>
+                                <span id="mgrWeightDisp" style="font-weight:bold; color:var(--primary);">${mgrWeight}%</span>
+                            </label>
+                            <div class="range-container">
+                                <input type="range" class="range-input" style="width:100%" min="0" max="1" step="0.05" value="${currentConfig.manager_weight}" oninput="updateCurrentMgrWeight(this.value)">
+                            </div>
+                        </div>
+                         <div class="input-group">
+                            <label class="input-label" style="display:flex; justify-content:space-between;">
+                                <span>其他同仁/平級佔比 (Peer Weight)</span>
+                                <span id="peerWeightDisp" style="font-weight:bold; color:var(--primary);">${peerWeightRaw}%</span>
+                            </label>
+                            
+                            <!-- Breakdown Box -->
+                            <div style="font-size: 13px; color: #64748b; margin-top: 8px; background:#f1f5f9; padding:10px; border-radius:6px;">
+                                <div><i class="fa-solid fa-calculator"></i> 權重計算說明：</div>
+                                <div style="margin-top:4px; margin-left:10px;">• 原始剩餘權重：${peerWeightRaw}% (100% - 主管)</div>
+                                ${subWeightPercent > 0 ? `<div style="margin-left:10px; color:#e11d48; font-weight:600;">• 扣除下屬績效：-${subWeightPercent}%</div>` : ''}
+                                <div style="margin-top:4px; margin-left:10px; border-top:1px solid #cbd5e1; padding-top:4px; color:#059669; font-weight:700;">
+                                    = 同仁互評實際佔比：${effectivePeerWeight}%
+                                </div>
+                            </div>
+
+                            <!-- Detected Peers List -->
+                             <div style="margin-top: 12px; border-top: 1px solid #e2e8f0; padding-top: 10px;">
+                                <div style="font-size:12px; font-weight:600; color:#475569; margin-bottom:5px;">📝 包含的同仁名單 (這些人<span style="color:#4f46e5;">打給此員工的分數</span>):</div>
+                                <div class="tag-container" style="max-height:100px; overflow-y:auto;">
+                                    ${peerHtml}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2. Designated Managers -->
+                    <div class="config-card">
+                        <div class="card-header">
+                            <div class="card-title">指定主管 (有哪些人評核這位員工?)</div>
+                            <button class="btn btn-outline" style="font-size:12px;" onclick="openAddManagerModal()">+ 新增主管</button>
+                        </div>
+                        <div class="tag-container" id="managerTags">
+                            ${managersHtml}
+                        </div>
+                        <div style="margin-top:5px; font-size:12px; color:#666;">
+                            * 若列表為空，系統將自動依據部門判定主管。若有指定，則僅以此清單為主。
+                        </div>
+                    </div>
+                
+                    <!-- 3. Subordinate Rules -->
+                    <div class="config-card">
+                        <div class="card-header">
+                            <div class="card-title">📊 下屬績效佔比設定</div>
+                            <button class="btn btn-primary" style="font-size:12px;" onclick="addRule()">+ 新增群組</button>
+                        </div>
+                        <div style="font-size:12px; color:#64748b; margin-bottom:10px; background:#fef3c7; padding:8px; border-radius:6px; border-left:3px solid #f59e0b;">
+                            <i class="fa-solid fa-info-circle" style="color:#f59e0b;"></i>
+                            此區設定的下屬，其<strong style="color:#b45309;">自身績效分數的平均</strong>會算入主管的總分。
+                            <br>（意即：下屬做得好，主管分數就高）
+                        </div>
+                        <div id="subRuleList"></div>
+                    </div>
+                </div>
+             `;
+
+            renderCurrentRules();
+        }
+
+        function renderCurrentRules() {
+            const list = document.getElementById('subRuleList');
+            list.innerHTML = '';
+
+            if (!currentConfig.subordinate_rules || currentConfig.subordinate_rules.length === 0) {
+                list.innerHTML = '<div style="text-align:center; color:#999; padding:10px;">無下屬績效規則</div>';
+                return;
+            }
+
+            currentConfig.subordinate_rules.forEach((rule, idx) => {
+                const membersHtml = rule.members.map(m =>
+                    `<span class="tag">${m} <i class="fa-solid fa-times" onclick="removeMem(${idx}, '${m}')"></i></span>`
+                ).join('');
+
+                const div = document.createElement('div');
+                div.className = 'subordinate-rule';
+                div.innerHTML = `
+                    <div class="rule-header">
+                        <input type="text" class="text-input" style="width:200px; font-weight:bold;" value="${rule.name}" onchange="modifyRuleName(${idx}, this.value)">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <label>權重:</label>
+                            <input type="number" step="0.1" max="1" min="0" value="${rule.weight}" style="width:60px;" onchange="modifyRuleWeight(${idx}, this.value)">
+                            <button style="color:red; border:none; background:none; cursor:pointer;" onclick="deleteRule(${idx})"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                    </div>
+                    <div class="tag-container">
+                        ${membersHtml}
+                        <button class="tag" style="background:#eee; color:#333; cursor:pointer;" onclick="openAddMemberModal(${idx})">+ 加人</button>
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        // -- Actions --
+        window.removeManager = (name) => {
+            const idx = currentConfig.managers.indexOf(name);
+            if (idx > -1) {
+                currentConfig.managers.splice(idx, 1);
+                renderEditor();
+            }
+        }
+        window.openAddManagerModal = () => {
+            openPersonModal((name) => {
+                if (!currentConfig.managers.includes(name)) {
+                    currentConfig.managers.push(name);
+                    renderEditor();
+                }
+            }, "新增主管");
+        }
+
+        // Rules Actions
+        window.addRule = () => {
+            if (!currentConfig.subordinate_rules) currentConfig.subordinate_rules = [];
+            currentConfig.subordinate_rules.push({ name: '新群組', weight: 0.1, members: [] });
+            renderCurrentRules();
+        }
+        window.deleteRule = (idx) => {
+            currentConfig.subordinate_rules.splice(idx, 1);
+            renderCurrentRules();
+        }
+        window.modifyRuleName = (idx, val) => { currentConfig.subordinate_rules[idx].name = val; }
+        window.modifyRuleWeight = (idx, val) => { currentConfig.subordinate_rules[idx].weight = parseFloat(val); }
+        window.removeMem = (idx, memName) => {
+            const arr = currentConfig.subordinate_rules[idx].members;
+            const i = arr.indexOf(memName);
+            if (i > -1) arr.splice(i, 1);
+            renderCurrentRules();
+        }
+        window.openAddMemberModal = (ruleIdx) => {
+            openPersonModal((name) => {
+                const arr = currentConfig.subordinate_rules[ruleIdx].members;
+                if (!arr.includes(name)) { // Prevent duplicates
+                    arr.push(name);
+                    renderCurrentRules();
+                }
+            }, "新增下屬成員");
+        }
+
+        // Save
+        window.saveActiveEmployee = async () => {
+            if (!activeEmployeeName || !currentConfig) return;
+            ratingRules.employees[activeEmployeeName] = JSON.parse(JSON.stringify(currentConfig));
+            // Sync special_rules just in case
+            if (ratingRules.special_rules && ratingRules.special_rules[activeEmployeeName]) {
+                delete ratingRules.special_rules[activeEmployeeName]; // Remove from legacy if exists to prefer employees key
+            }
+
+            // Attempt to save to server
+            try {
+                const response = await fetch('/api/save-rules', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(ratingRules)
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.success) {
+                        // Create a toast or non-blocking notification if possible, but alert is fine for now
+                        const toast = document.createElement('div');
+                        toast.style.position = 'fixed';
+                        toast.style.top = '20px';
+                        toast.style.right = '20px';
+                        toast.style.padding = '15px 25px';
+                        toast.style.background = '#10b981'; // Green
+                        toast.style.color = 'white';
+                        toast.style.borderRadius = '8px';
+                        toast.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
+                        toast.style.zIndex = '9999';
+                        toast.style.fontWeight = '500';
+                        toast.innerHTML = '<i class="fa-solid fa-check"></i> 已成功儲存並套用至伺服器！';
+                        document.body.appendChild(toast);
+                        setTimeout(() => toast.remove(), 3000);
+                        return; // Success, no need to alert
+                    }
+                }
+                throw new Error("Server save failed");
+            } catch (e) {
+                console.warn("Server save failed, falling back to local save message", e);
+                alert("已暫存！無法連接伺服器，請按「下載設定檔」手動更新。");
+            }
+        }
+
+        window.exportJson = () => {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(ratingRules, null, 2));
+            const dl = document.createElement('a');
+            dl.setAttribute("href", dataStr);
+            dl.setAttribute("download", "rating_rules.json");
+            document.body.appendChild(dl);
+            dl.click();
+            dl.remove();
+        }
+
+        // Modal Logic
+        let onPersonSelected = null;
+        function openPersonModal(cb, title) {
+            onPersonSelected = cb;
+            document.getElementById('modalTitle').innerText = title || "選擇人員";
+            document.getElementById('addPersonModal').style.display = 'flex';
+            populateModalList('');
+        }
+        window.closeModal = () => { document.getElementById('addPersonModal').style.display = 'none'; }
+
+        function populateModalList(filter) {
+            const list = document.getElementById('personList');
+            list.innerHTML = '';
+            const f = filter.toLowerCase();
+            allEmployees.forEach(name => {
+                if (!name.toLowerCase().includes(f)) return;
+                const div = document.createElement('div');
+                div.style.padding = '8px';
+                div.style.cursor = 'pointer';
+                div.style.borderBottom = '1px solid #f0f0f0';
+                div.innerText = name;
+                div.onclick = () => {
+                    if (onPersonSelected) onPersonSelected(name);
+                    closeModal();
+                };
+                list.appendChild(div);
+            });
+        }
+
+        // Search in modal
+        document.getElementById('personSearch').oninput = (e) => populateModalList(e.target.value);
+
+        // Search in tree
+        document.getElementById('treeSearch').oninput = renderTree;
+
+        window.onload = init;
+    </script>
 </body>
 
 </html>

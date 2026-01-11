@@ -1,0 +1,606 @@
+{
+  "system_settings": {
+    "default_manager_weight": 0.5,
+    "default_peer_weight": 0.5,
+    "default_rounding": "custom"
+  },
+  "groups": {
+    "MANAGERS": [
+      "李冠葦",
+      "陳淑錡",
+      "林紀騰",
+      "高靜華",
+      "廖振杉",
+      "陳宛妤",
+      "簡采琦",
+      "廖慧雯",
+      "鍾宜珮",
+      "林品亨",
+      "楊顗帆"
+    ]
+  },
+  "employees": {
+    "李鳳翎": {
+      "manager_weight": 0.5,
+      "managers": [
+        "李冠葦"
+      ],
+      "subordinate_rules": []
+    },
+    "白梅芳": {
+      "manager_weight": 1,
+      "managers": [
+        "李冠葦",
+        "廖慧雯",
+        "廖振杉",
+        "楊顗帆"
+      ],
+      "subordinate_rules": []
+    },
+    "王姿斐": {
+      "manager_weight": 0.5,
+      "managers": [
+        "李冠葦"
+      ],
+      "subordinate_rules": []
+    },
+    "王元鼎": {
+      "manager_weight": 0.5,
+      "managers": [
+        "李冠葦",
+        "陳淑錡"
+      ],
+      "subordinate_rules": []
+    },
+    "劉宛宣": {
+      "manager_weight": 0.5,
+      "managers": [
+        "廖慧雯",
+        "林品亨",
+        "鍾宜珮"
+      ],
+      "subordinate_rules": []
+    },
+    "廖慧雯": {
+      "manager_weight": 0.5,
+      "managers": [
+        "董事長"
+      ],
+      "subordinate_rules": [
+        {
+          "name": "機構員工",
+          "weight": 0.5,
+          "members": [
+            "劉婷瑜",
+            "劉宛宣",
+            "吳思函",
+            "吳秉熹",
+            "林品亨",
+            "胡少淇",
+            "蔣郡哲",
+            "蘇盟惠",
+            "郭楷欣",
+            "鍾宜珮",
+            "陳昱綸",
+            "黃歆藝",
+            "黃穎蓁"
+          ]
+        }
+      ]
+    },
+    "羅如光": {
+      "manager_weight": 0.5,
+      "managers": [
+        "李冠葦",
+        "林紀騰",
+        "陳淑錡"
+      ],
+      "subordinate_rules": []
+    },
+    "劉婷瑜": {
+      "manager_weight": 0.5,
+      "managers": [
+        "廖慧雯",
+        "林品亨",
+        "鍾宜珮"
+      ],
+      "subordinate_rules": []
+    },
+    "劉春燕": {
+      "manager_weight": 0.5,
+      "managers": [
+        "李冠葦",
+        "陳淑錡"
+      ],
+      "subordinate_rules": []
+    },
+    "梁偉培": {
+      "manager_weight": 0.5,
+      "managers": [
+        "簡采琦"
+      ],
+      "subordinate_rules": []
+    },
+    "王卉蓁": {
+      "manager_weight": 0.5,
+      "managers": [
+        "廖振杉",
+        "簡采琦",
+        "陳宛妤"
+      ],
+      "subordinate_rules": []
+    },
+    "吳秉熹": {
+      "manager_weight": 0.5,
+      "managers": [
+        "廖慧雯",
+        "林品亨",
+        "鍾宜珮"
+      ],
+      "subordinate_rules": []
+    },
+    "廖振杉": {
+      "manager_weight": 0.5,
+      "managers": [
+        "董事長"
+      ],
+      "subordinate_rules": [
+        {
+          "name": "機構員工",
+          "weight": 0.5,
+          "members": [
+            "熊小蓮",
+            "簡采琦",
+            "廖玟慈",
+            "張宜芳",
+            "曾婷婷",
+            "李炎輝",
+            "林東美",
+            "梁偉培",
+            "王卉蓁",
+            "蕭婷予",
+            "許芸嘉",
+            "賀郁茵",
+            "陳亮寧",
+            "陳宛妤"
+          ]
+        }
+      ]
+    },
+    "徐銘澤": {
+      "manager_weight": 0.5,
+      "managers": [
+        "李冠葦",
+        "林紀騰",
+        "陳淑錡"
+      ],
+      "subordinate_rules": []
+    },
+    "曾婷婷": {
+      "manager_weight": 0.5,
+      "managers": [
+        "廖振杉",
+        "簡采琦",
+        "陳宛妤"
+      ],
+      "subordinate_rules": []
+    },
+    "陳柔安": {
+      "manager_weight": 0.5,
+      "managers": [
+        "楊顗帆"
+      ],
+      "subordinate_rules": []
+    },
+    "李炎輝": {
+      "manager_weight": 0.5,
+      "managers": [
+        "廖振杉",
+        "簡采琦",
+        "陳宛妤"
+      ],
+      "subordinate_rules": []
+    },
+    "謝秀桃": {
+      "manager_weight": 0.5,
+      "managers": [
+        "李冠葦",
+        "林紀騰",
+        "陳淑錡"
+      ],
+      "subordinate_rules": []
+    },
+    "張宜芳": {
+      "manager_weight": 0.5,
+      "managers": [
+        "廖振杉",
+        "簡采琦",
+        "陳宛妤"
+      ],
+      "subordinate_rules": []
+    },
+    "廖玟慈": {
+      "manager_weight": 0.5,
+      "managers": [
+        "廖振杉",
+        "簡采琦",
+        "陳宛妤"
+      ],
+      "subordinate_rules": []
+    },
+    "林港博": {
+      "manager_weight": 0.5,
+      "managers": [
+        "李冠葦",
+        "林紀騰",
+        "陳淑錡"
+      ],
+      "subordinate_rules": []
+    },
+    "陸廷瑋": {
+      "manager_weight": 0.5,
+      "managers": [
+        "李冠葦",
+        "陳淑錡"
+      ],
+      "subordinate_rules": []
+    },
+    "李冠葦": {
+      "manager_weight": 0.5,
+      "managers": [
+        "董事長"
+      ],
+      "subordinate_rules": [
+        {
+          "name": "機構員工",
+          "weight": 0.5,
+          "members": [
+            "劉春燕",
+            "徐銘澤",
+            "林港博",
+            "林紀騰",
+            "林麗娟",
+            "王元鼎",
+            "王芊蓉",
+            "羅如光",
+            "謝秀桃",
+            "陳淑錡",
+            "陸廷瑋"
+          ]
+        }
+      ]
+    },
+    "胡少淇": {
+      "manager_weight": 0.5,
+      "managers": [
+        "廖慧雯",
+        "林品亨",
+        "鍾宜珮"
+      ],
+      "subordinate_rules": []
+    },
+    "王芊蓉": {
+      "manager_weight": 0.5,
+      "managers": [
+        "李冠葦",
+        "陳淑錡"
+      ],
+      "subordinate_rules": []
+    },
+    "陳亮寧": {
+      "manager_weight": 0.5,
+      "managers": [
+        "廖振杉",
+        "簡采琦",
+        "陳宛妤"
+      ],
+      "subordinate_rules": []
+    },
+    "林品亨": {
+      "manager_weight": 0.5,
+      "managers": [
+        "廖慧雯",
+        "鍾宜珮"
+      ],
+      "subordinate_rules": [
+        {
+          "name": "少年家園生輔股",
+          "weight": 0.4,
+          "members": [
+            "胡少淇",
+            "郭楷欣",
+            "吳秉熹",
+            "蔣郡哲",
+            "劉婷瑜",
+            "吳思函",
+            "陳昱綸"
+          ]
+        },
+        {
+          "name": "少年家園教保組其他員工",
+          "weight": 0.1,
+          "members": [
+            "蘇盟惠",
+            "劉宛宣",
+            "黃歆藝",
+            "黃穎蓁"
+          ]
+        }
+      ]
+    },
+    "許芸嘉": {
+      "manager_weight": 0.5,
+      "managers": [
+        "廖振杉",
+        "簡采琦",
+        "陳宛妤"
+      ],
+      "subordinate_rules": []
+    },
+    "簡采琦": {
+      "manager_weight": 0.5,
+      "managers": [
+        "廖振杉",
+        "陳宛妤"
+      ],
+      "subordinate_rules": [
+        {
+          "name": "兒少之家社工股",
+          "weight": 0.4,
+          "members": [
+            "曾婷婷"
+          ]
+        },
+        {
+          "name": "兒少之家教保組其他員工",
+          "weight": 0.1,
+          "members": [
+            "林東美",
+            "賀郁茵",
+            "梁偉培",
+            "廖玟慈",
+            "張宜芳",
+            "蕭婷予",
+            "王卉蓁",
+            "陳亮寧",
+            "李炎輝",
+            "許芸嘉"
+          ]
+        }
+      ]
+    },
+    "林東美": {
+      "manager_weight": 0.5,
+      "managers": [
+        "廖振杉",
+        "簡采琦",
+        "陳宛妤"
+      ],
+      "subordinate_rules": []
+    },
+    "高靜華": {
+      "manager_weight": 1,
+      "managers": [
+        "李冠葦",
+        "廖振杉",
+        "廖慧雯"
+      ],
+      "subordinate_rules": []
+    },
+    "蕭婷予": {
+      "manager_weight": 0.5,
+      "managers": [
+        "廖振杉",
+        "簡采琦",
+        "陳宛妤"
+      ],
+      "subordinate_rules": []
+    },
+    "吳思函": {
+      "manager_weight": 0.5,
+      "managers": [
+        "廖慧雯",
+        "林品亨",
+        "鍾宜珮"
+      ],
+      "subordinate_rules": []
+    },
+    "鍾宜珮": {
+      "manager_weight": 0.5,
+      "managers": [
+        "廖慧雯"
+      ],
+      "subordinate_rules": [
+        {
+          "name": "少年家園教保組員",
+          "weight": 0.5,
+          "members": [
+            "林品亨",
+            "胡少淇",
+            "郭楷欣",
+            "吳秉熹",
+            "蔣郡哲",
+            "劉婷瑜",
+            "黃穎蓁",
+            "吳思函",
+            "蘇盟惠",
+            "劉宛宣",
+            "黃歆藝",
+            "陳昱綸"
+          ]
+        }
+      ]
+    },
+    "楊顗帆": {
+      "manager_weight": 0.5,
+      "managers": [
+        "董事長"
+      ],
+      "subordinate_rules": [
+        {
+          "name": "機構員工",
+          "weight": 0.5,
+          "members": [
+            "林彥秀",
+            "陳柔安"
+          ]
+        }
+      ]
+    },
+    "蔣郡哲": {
+      "manager_weight": 0.5,
+      "managers": [
+        "廖慧雯",
+        "林品亨",
+        "鍾宜珮"
+      ],
+      "subordinate_rules": []
+    },
+    "林紀騰": {
+      "manager_weight": 0.5,
+      "managers": [
+        "李冠葦",
+        "陳淑錡"
+      ],
+      "subordinate_rules": [
+        {
+          "name": "庶務股股員",
+          "weight": 0.3,
+          "members": [
+            "林港博",
+            "謝秀桃",
+            "徐銘澤",
+            "羅如光"
+          ]
+        }
+      ]
+    },
+    "林彥秀": {
+      "manager_weight": 0.5,
+      "managers": [
+        "楊顗帆"
+      ],
+      "subordinate_rules": []
+    },
+    "林麗娟": {
+      "manager_weight": 0.5,
+      "managers": [
+        "李冠葦",
+        "陳淑錡"
+      ],
+      "subordinate_rules": []
+    },
+    "黃歆藝": {
+      "manager_weight": 0.5,
+      "managers": [
+        "廖慧雯",
+        "林品亨",
+        "鍾宜珮"
+      ],
+      "subordinate_rules": []
+    },
+    "賀郁茵": {
+      "manager_weight": 0.5,
+      "managers": [
+        "廖振杉",
+        "簡采琦",
+        "陳宛妤"
+      ],
+      "subordinate_rules": []
+    },
+    "郭楷欣": {
+      "manager_weight": 0.5,
+      "managers": [
+        "廖慧雯",
+        "林品亨",
+        "鍾宜珮"
+      ],
+      "subordinate_rules": []
+    },
+    "陳淑錡": {
+      "manager_weight": 0.5,
+      "managers": [
+        "李冠葦"
+      ],
+      "subordinate_rules": [
+        {
+          "name": "行政組員",
+          "weight": 0.5,
+          "members": [
+            "劉春燕",
+            "徐銘澤",
+            "林港博",
+            "林紀騰",
+            "林麗娟",
+            "王元鼎",
+            "王芊蓉",
+            "羅如光",
+            "謝秀桃",
+            "陸廷瑋"
+          ]
+        }
+      ]
+    },
+    "陳昱綸": {
+      "manager_weight": 0.5,
+      "managers": [
+        "廖慧雯",
+        "林品亨",
+        "鍾宜珮"
+      ],
+      "subordinate_rules": []
+    },
+    "熊小蓮": {
+      "manager_weight": 0.5,
+      "managers": [
+        "李冠葦",
+        "陳淑錡"
+      ],
+      "subordinate_rules": []
+    },
+    "陳宛妤": {
+      "manager_weight": 0.5,
+      "managers": [
+        "廖振杉"
+      ],
+      "subordinate_rules": [
+        {
+          "name": "兒少之家教保組員",
+          "weight": 0.5,
+          "members": [
+            "簡采琦",
+            "林東美",
+            "賀郁茵",
+            "梁偉培",
+            "廖玟慈",
+            "張宜芳",
+            "蕭婷予",
+            "王卉蓁",
+            "陳亮寧",
+            "曾婷婷",
+            "李炎輝",
+            "許芸嘉"
+          ]
+        }
+      ]
+    },
+    "黃穎蓁": {
+      "manager_weight": 0.5,
+      "managers": [
+        "廖慧雯",
+        "林品亨",
+        "鍾宜珮"
+      ],
+      "subordinate_rules": []
+    },
+    "蘇盟惠": {
+      "manager_weight": 0.5,
+      "managers": [
+        "廖慧雯",
+        "林品亨",
+        "鍾宜珮"
+      ],
+      "subordinate_rules": []
+    }
+  }
+}

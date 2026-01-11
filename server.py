@@ -271,6 +271,28 @@ class ScoreHandler(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps({"success": False, "error": str(e)}, ensure_ascii=False).encode('utf-8'))
             return
+
+        # Save rating rules to file
+        if parsed_path.path == '/api/save-rules':
+            try:
+                # Parse JSON body
+                rules_data = json.loads(post_data)
+                
+                # Write to rating_rules.json
+                rules_path = os.path.join(BASE_DIR, 'rating_rules.json')
+                with open(rules_path, 'w', encoding='utf-8') as f:
+                    json.dump(rules_data, f, ensure_ascii=False, indent=2)
+                
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": True, "message": "規則已儲存至伺服器"}, ensure_ascii=False).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": str(e)}, ensure_ascii=False).encode('utf-8'))
+            return
         
 
         
@@ -905,201 +927,44 @@ class ScoreHandler(SimpleHTTPRequestHandler):
             missing_raters = []
             subordinates = []
             
-            # Define manager -> subordinates relationships
-            MANAGER_SUBORDINATES = {
-                '李冠葦': {'陳淑錡', '林紀騰', '劉春燕', '林麗娟', '熊小蓮', '王元鼎', '王芊蓉', '陸廷瑋', '林港博', '謝秀桃', '徐銘澤', '羅如光'},
-                '陳淑錡': {'林紀騰', '劉春燕', '林麗娟', '熊小蓮', '王元鼎', '王芊蓉', '陸廷瑋', '林港博', '謝秀桃', '徐銘澤', '羅如光'},
-                '林紀騰': {'林港博', '謝秀桃', '徐銘澤', '羅如光'},
-                '高靜華': set(),
-                '廖振杉': {'陳宛妤', '簡采琦', '林東美', '賀郁茵', '廖玟慈', '張宜芳', '蕭婷予', '陳亮寧', '王卉蓁', '許芸嘉', '李炎輝', '曾婷婷'},
-                '陳宛妤': {'林東美', '賀郁茵', '廖玟慈', '張宜芳', '蕭婷予', '陳亮寧', '王卉蓁', '許芸嘉', '李炎輝', '曾婷婷', '簡采琦'},
-                '簡采琦': {'廖玟慈', '張宜芳', '蕭婷予', '陳亮寧', '曾婷婷', '李炎輝', '林東美', '梁偉培', '王卉蓁', '許芸嘉', '賀郁茵'},
-                '廖慧雯': {'鍾宜珮', '林品亨', '蘇盟惠', '劉宛宣', '郭楷欣', '吳秉熹', '胡少淇', '陳昱綸', '黃穎蓁', '蔣郡哲', '劉婷瑜', '吳思函', '黃歆藝'},
-                '鍾宜珮': {'蘇盟惠', '劉宛宣', '郭楷欣', '吳秉熹', '胡少淇', '陳昱綸', '黃穎蓁', '蔣郡哲', '劉婷瑜', '吳思函', '林品亨', '黃歆藝'},
-                '林品亨': {'胡少淇', '陳昱綸', '蔣郡哲', '劉婷瑜', '吳思函', '郭楷欣', '吳秉熹', '劉宛宣', '蘇盟惠', '黃歆藝', '黃穎蓁'},
-                '楊顗帆': {'陳柔安', '林彥秀'},
-            }
+            # --- Dynamic Logic from rating_rules.json ---
             
-            employee_subordinates = MANAGER_SUBORDINATES.get(employee, set())
+            # 1. Get Employee Config
+            emp_config = EMPLOYEE_CONFIGS.get(employee, {})
+            my_managers = set(emp_config.get("managers", []))
+            manager_weight_setting = emp_config.get("manager_weight", 0.5)
+            sub_rules = emp_config.get("subordinate_rules", [])
             
+            # Calculate implied peer weight
+            sub_total_weight = sum(r.get("weight", 0) for r in sub_rules)
+            peer_weight_setting = max(0.0, 1.0 - manager_weight_setting - sub_total_weight)
+            
+            # 2. Identify Subordinates (Reverse lookup from rules)
+            if not subordinates:
+                for other_name, other_conf in EMPLOYEE_CONFIGS.items():
+                    if employee in other_conf.get("managers", []):
+                        subordinates.append(other_name)
+                subordinates = sorted(subordinates)
+
+            # 3. Identify Missing Raters
             if meta['org'] != '未分類':
                 peers = peers_map.get((meta['org'], meta['unit']), [])
                 existing_rater_names = set(r['name'] for r in current_raters)
                 for p in peers:
                     if p != employee and p not in existing_rater_names:
-                        if p in employee_subordinates:
-                            subordinates.append(p)
-                        else:
+                        # Exclude if they are my manager or my subordinate
+                        if p not in my_managers and p not in subordinates:
                             missing_raters.append(p)
                 missing_raters = sorted(missing_raters)
-                subordinates = sorted(subordinates)
-            
-            # Custom rounding: .1-.9 → round up (ceil), .0 → round down (floor)
+
+            # Helper: Custom rounding
             import math
             def custom_round(value):
-                first_decimal = int((value * 10) % 10)  # Get first decimal digit
+                first_decimal = int((value * 10) % 10)
                 if first_decimal >= 1:
                     return math.ceil(value)
                 else:
                     return math.floor(value)
-            
-            # Special case: Supervisors' scores come from the SCORES of their subordinates
-            SPECIAL_SUPERVISOR_RULES = {
-                '林紀騰': {
-                    '庶務股股員': (['林港博', '謝秀桃', '徐銘澤', '羅如光'], '庶務股員績效平均')
-                },
-                '簡采琦': {
-                    '兒少之家社工股': (['曾婷婷'], '社工股員績效平均'),
-                    '兒少之家教保組其他員工': (['林東美', '賀郁茵', '梁偉培', '廖玟慈', '張宜芳', '蕭婷予', '王卉蓁', '陳亮寧', '李炎輝', '許芸嘉'], '保育股員績效平均')
-                },
-                '林品亨': {
-                    '少年家園生輔股': (['胡少淇', '郭楷欣', '吳秉熹', '蔣郡哲', '劉婷瑜', '吳思函', '陳昱綸'], '生輔股員績效平均'),
-                    '少年家園教保組其他員工': (['蘇盟惠', '劉宛宣', '黃歆藝', '黃穎蓁'], '社工心輔股員績效平均')
-                },
-                # 4 Institution Heads: 50% 董事長 + 50% 下轄員工績效
-                '李冠葦': {
-                    '機構員工': (['劉春燕', '徐銘澤', '林港博', '林紀騰', '林麗娟', '王元鼎', '王芊蓉', '羅如光', '謝秀桃', '陳淑錡', '陸廷瑋'], '行政組員工績效平均')
-                },
-                '廖振杉': {
-                    '機構員工': (['熊小蓮', '簡采琦', '廖玟慈', '張宜芳', '曾婷婷', '李炎輝', '林東美', '梁偉培', '王卉蓁', '蕭婷予', '許芸嘉', '賀郁茵', '陳亮寧', '陳宛妤'], '兒少之家員工績效平均')
-                },
-                '廖慧雯': {
-                    '機構員工': (['劉婷瑜', '劉宛宣', '吳思函', '吳秉熹', '林品亨', '胡少淇', '蔣郡哲', '蘇盟惠', '郭楷欣', '鍾宜珮', '陳昱綸', '黃歆藝', '黃穎蓁'], '少年家園員工績效平均')
-                },
-                '楊顗帆': {
-                    '機構員工': (['林彥秀', '陳柔安'], '諮商所員工績效平均')
-                },
-                # 教保組長: 50% 主管 + 50% 教保組員工績效
-                '陳宛妤': {
-                    '兒少之家教保組員': (['簡采琦', '林東美', '賀郁茵', '梁偉培', '廖玟慈', '張宜芳', '蕭婷予', '王卉蓁', '陳亮寧', '曾婷婷', '李炎輝', '許芸嘉'], '兒少之家教保組員工績效平均')
-                },
-                '鍾宜珮': {
-                    '少年家園教保組員': (['林品亨', '胡少淇', '郭楷欣', '吳秉熹', '蔣郡哲', '劉婷瑜', '黃穎蓁', '吳思函', '蘇盟惠', '劉宛宣', '黃歆藝', '陳昱綸'], '少年家園教保組員工績效平均')
-                },
-                # 行政副組長: 50% 主管 + 50% 行政組員工績效
-                '陳淑錡': {
-                    '行政組員': (['劉春燕', '徐銘澤', '林港博', '林紀騰', '林麗娟', '王元鼎', '王芊蓉', '羅如光', '謝秀桃', '陸廷瑋'], '行政組員工績效平均')
-                }
-            }
-            
-            # Institution head rules: 50% 董事長 + 50% 員工績效
-            INSTITUTION_HEAD_RULES = {
-                '李冠葦': [("董事長", lambda n: n == '董事長', 0.5), ("機構員工", lambda n: True, 0.5)],
-                '廖振杉': [("董事長", lambda n: n == '董事長', 0.5), ("機構員工", lambda n: True, 0.5)],
-                '廖慧雯': [("董事長", lambda n: n == '董事長', 0.5), ("機構員工", lambda n: True, 0.5)],
-                '楊顗帆': [("董事長", lambda n: n == '董事長', 0.5), ("機構員工", lambda n: True, 0.5)]
-            }
-            
-            # Helper to calculate weighted category averages based on rules
-            def calc_weighted_category(raters, rules, cat_key, emp_name, special_rules):
-                total_weighted = 0.0
-                total_weight = 0.0
-                
-                # Check if this employee has special supervisor rules
-                if emp_name in special_rules:
-                    supervisor_rules = special_rules[emp_name]
-                    for desc, filter_fn, weight in rules:
-                        if desc in supervisor_rules:
-                            members, _ = supervisor_rules[desc]
-                            # Get category avg from employees' own scores
-                            member_cats = []
-                            for m in members:
-                                if m in employee_scores:
-                                    m_raters = employee_raters[m]
-                                    if m_raters:
-                                        m_cat_avg = sum(r[cat_key] for r in m_raters) / len(m_raters)
-                                        member_cats.append(m_cat_avg)
-                            if member_cats:
-                                avg = sum(member_cats) / len(member_cats)
-                                total_weighted += avg * weight
-                                total_weight += weight
-                        else:
-                            filtered = [r[cat_key] for r in raters if filter_fn(r['name'])]
-                            if filtered:
-                                avg = sum(filtered) / len(filtered)
-                                total_weighted += avg * weight
-                                total_weight += weight
-                else:
-                    # Normal rules
-                    for desc, filter_fn, weight in rules:
-                        filtered = [r[cat_key] for r in raters if filter_fn(r['name'])]
-                        if filtered:
-                            avg = sum(filtered) / len(filtered)
-                            total_weighted += avg * weight
-                            total_weight += weight
-                
-                if total_weight > 0 and total_weight < 1.0:
-                    return total_weighted / total_weight
-                elif total_weight > 0:
-                    return total_weighted
-                else:
-                    # Fallback to simple average
-                    return sum(r[cat_key] for r in raters) / len(raters) if raters else 0.0
-            
-            employee_section_for_rules = meta.get('section', '')
-            rules = EMPLOYEE_RULES.get(employee, get_rules_for_employee(employee, employee_section_for_rules))
-            
-            cat1_avg = calc_weighted_category(current_raters, rules, 'cat1', employee, SPECIAL_SUPERVISOR_RULES)
-            cat2_avg = calc_weighted_category(current_raters, rules, 'cat2', employee, SPECIAL_SUPERVISOR_RULES)
-            cat3_avg = calc_weighted_category(current_raters, rules, 'cat3', employee, SPECIAL_SUPERVISOR_RULES)
-            
-            cat1_rounded = custom_round(cat1_avg)
-            cat2_rounded = custom_round(cat2_avg)
-            cat3_rounded = custom_round(cat3_avg)
-            
-            # Apply rules
-            employee_section = meta.get('section', '')
-            rules = EMPLOYEE_RULES.get(employee, get_rules_for_employee(employee, employee_section))
-            breakdown = []
-            total_weighted_score = 0.0
-            total_weight_used = 0.0
-            
-            if employee in SPECIAL_SUPERVISOR_RULES:
-                supervisor_rules = SPECIAL_SUPERVISOR_RULES[employee]
-                for desc, filter_fn, weight in rules:
-                    if desc in supervisor_rules:
-                        members, new_desc = supervisor_rules[desc]
-                        member_scores = []
-                        for m in members:
-                            if m in employee_scores:
-                                m_avg = sum(employee_scores[m]) / len(employee_scores[m])
-                                member_scores.append(m_avg)
-                        
-                        if member_scores:
-                            avg = sum(member_scores) / len(member_scores)
-                            total_weighted_score += avg * weight
-                            total_weight_used += weight
-                            breakdown.append({
-                                "desc": new_desc,
-                                "weight": int(weight * 100),
-                                "avg": float(f"{avg:.2f}"),
-                                "count": len(member_scores),
-                                "raters": [f"{m}({sum(employee_scores[m])/len(employee_scores[m]):.1f})" for m in members if m in employee_scores]
-                            })
-                    else:
-                        # Normal processing for other rules (主管, etc.)
-                        avg = avg_from_raters(current_raters, filter_fn)
-                        filtered_raters = [r for r in current_raters if filter_fn(r['name'])]
-                        filtered_count = len(filtered_raters)
-                        filtered_names = [r['name'] for r in filtered_raters]
-                        
-                        if filtered_count > 0:
-                            total_weighted_score += avg * weight
-                            total_weight_used += weight
-                            breakdown.append({
-                                "desc": desc,
-                                "weight": int(weight * 100),
-                                "avg": float(f"{avg:.2f}"),
-                                "count": filtered_count,
-                                "raters": filtered_names
-                            })
-            else:
-                # Normal processing for non-special employees
-                # Calculate breakdown with rounded category sums
-                for desc, filter_fn, weight in rules:
-                    filtered_raters = [r for r in current_raters if filter_fn(r['name'])]
-                    filtered_count = len(filtered_raters)
-                    filtered_names = [r['name'] for r in filtered_raters]
                     
                     if filtered_count > 0:
                         # Calculate each category average for this group
