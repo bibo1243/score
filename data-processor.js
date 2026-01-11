@@ -125,6 +125,7 @@ async function processScoresForDisplay(rawScores) {
         const myManagers = new Set(empConfig.managers || []);
         const managerWeight = empConfig.manager_weight !== undefined ? empConfig.manager_weight : 0.5;
         const subRules = empConfig.subordinate_rules || [];
+        const excludedPeers = new Set(empConfig.excluded_peers || []);
 
         // Calculate Weights
         let subTotalWeight = 0;
@@ -220,8 +221,8 @@ async function processScoresForDisplay(rawScores) {
                 }
             });
 
-            // C. Peers
-            const myPeerRaters = currentRaters.filter(r => !myManagers.has(r.name));
+            // C. Peers (exclude managers and excluded_peers)
+            const myPeerRaters = currentRaters.filter(r => !myManagers.has(r.name) && !excludedPeers.has(r.name));
             if (myPeerRaters.length > 0) {
                 const avg = myPeerRaters.reduce((s, r) => s + r[catKey], 0) / myPeerRaters.length;
                 totalWeighted += avg * peerWeight;

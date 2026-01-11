@@ -293,10 +293,46 @@ class ScoreHandler(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps({"success": False, "error": str(e)}, ensure_ascii=False).encode('utf-8'))
             return
-        
 
+        # Permanently delete a score record
+        if parsed_path.path == '/api/permanent-delete':
+            try:
+                data = json.loads(post_data)
+                ratee = data.get('ratee', '').strip()
+                rater = data.get('rater', '').strip()
+                
+                if USE_SUPABASE:
+                    import urllib.parse
+                    ratee_encoded = urllib.parse.quote(ratee)
+                    rater_encoded = urllib.parse.quote(rater)
+                    
+                    # DELETE request to Supabase
+                    url = f"{SUPABASE_URL}/rest/v1/scores?ratee=eq.{ratee_encoded}&rater=eq.{rater_encoded}"
+                    headers = {
+                        'apikey': SUPABASE_SERVICE_KEY,
+                        'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
+                        'Content-Type': 'application/json'
+                    }
+                    
+                    req = urllib.request.Request(url, headers=headers, method='DELETE')
+                    
+                    with urllib.request.urlopen(req) as response:
+                        self.send_response(200)
+                        self.send_header('Content-type', 'application/json; charset=utf-8')
+                        self.end_headers()
+                        self.wfile.write(json.dumps({"success": True, "message": f"已永久刪除 {rater} 對 {ratee} 的評分"}, ensure_ascii=False).encode('utf-8'))
+                else:
+                    self.send_response(400)
+                    self.send_header('Content-type', 'application/json; charset=utf-8')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"success": False, "error": "CSV 模式不支援永久刪除"}, ensure_ascii=False).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": str(e)}, ensure_ascii=False).encode('utf-8'))
+            return
         
-        self.send_response(404)
         self.end_headers()
     
     def backup_scores(self):

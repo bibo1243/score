@@ -1346,9 +1346,14 @@ async function showDeletedScores() {
                     <span class="deleted-scores">第一類: ${d.cat1}, 第二類: ${d.cat2}, 第三類: ${d.cat3}</span>
                     <span class="deleted-time">刪除於: ${d.deleted_at ? new Date(d.deleted_at).toLocaleString('zh-TW') : '未知'}</span>
                 </div>
-                <button class="restore-deleted-btn" onclick="restoreDeletedScore('${d.ratee}', '${d.rater}')">
-                    <i class="fa-solid fa-rotate-left"></i> 還原
-                </button>
+                <div class="deleted-actions" style="display:flex; gap:8px;">
+                    <button class="restore-deleted-btn" onclick="restoreDeletedScore('${d.ratee}', '${d.rater}')">
+                        <i class="fa-solid fa-rotate-left"></i> 還原
+                    </button>
+                    <button class="permanent-delete-btn" style="background:#dc2626; color:white; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:12px;" onclick="permanentDeleteScore('${d.ratee}', '${d.rater}')">
+                        <i class="fa-solid fa-trash"></i> 永久刪除
+                    </button>
+                </div>
             </div>
         `).join('');
 
@@ -1409,6 +1414,37 @@ async function restoreDeletedScore(ratee, rater) {
     } catch (err) {
         console.error('Restore deleted failed:', err);
         alert('還原失敗：' + err.message);
+    }
+}
+
+// Permanently delete a score record
+async function permanentDeleteScore(ratee, rater) {
+    window.isDialogOpen = true;
+    const confirmed = confirm(`⚠️ 警告：永久刪除後無法恢復！\n\n確定要永久刪除 ${rater} 對 ${ratee} 的評分嗎？`);
+    window.isDialogOpen = false;
+
+    if (!confirmed) return;
+
+    try {
+        const response = await fetch('/api/permanent-delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ratee, rater })
+        });
+
+        if (!response.ok) throw new Error('刪除失敗');
+
+        const result = await response.json();
+        if (result.success) {
+            alert('已永久刪除！');
+            closeDeletedModal();
+            location.reload();
+        } else {
+            alert('刪除失敗：' + (result.error || '未知錯誤'));
+        }
+    } catch (err) {
+        console.error('Permanent delete failed:', err);
+        alert('刪除失敗：' + err.message);
     }
 }
 

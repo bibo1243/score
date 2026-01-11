@@ -458,6 +458,7 @@
             currentConfig = JSON.parse(JSON.stringify(src));
             if (!currentConfig.managers) currentConfig.managers = [];
             if (!currentConfig.subordinate_rules) currentConfig.subordinate_rules = [];
+            if (!currentConfig.excluded_peers) currentConfig.excluded_peers = [];
             if (currentConfig.manager_weight === undefined) currentConfig.manager_weight = 0.5;
 
             window.updateCurrentMgrWeight = (val) => {
@@ -495,15 +496,31 @@
                 ? currentConfig.managers.map(m => `<span class="tag">${m} <i class="fa-solid fa-times" onclick="removeManager('${m}')"></i></span>`).join('')
                 : '<span style="color:#999; font-size:12px;">(未指定，將使用預設邏輯)</span>';
 
-            // Identify Peers (Actual raters minus managers minus subordinates)
+            // Identify Peers (Actual raters minus managers minus subordinates minus excluded)
+            const excludedSet = new Set(currentConfig.excluded_peers || []);
             let peerHtml = '<span style="color:#999; font-size:12px;">(暫無資料)</span>';
+            let excludedHtml = '';
             const empData = employeeData.find(e => e.name === activeEmployeeName);
             if (empData && empData.raters) {
-                const peers = empData.raters.filter(r => !mgrSet.has(r.name) && !subMemberSet.has(r.name)).map(r => r.name);
-                if (peers.length > 0) {
-                    peerHtml = peers.map(p => `<span class="tag" style="background:#f1f5f9; color:#475569; border:1px solid #e2e8f0; cursor:default;">${p}</span>`).join('');
+                const allPotentialPeers = empData.raters.filter(r => !mgrSet.has(r.name) && !subMemberSet.has(r.name)).map(r => r.name);
+                const activePeers = allPotentialPeers.filter(p => !excludedSet.has(p));
+                const excludedPeers = allPotentialPeers.filter(p => excludedSet.has(p));
+
+                if (activePeers.length > 0) {
+                    peerHtml = activePeers.map(p => `<span class="tag" style="background:#f1f5f9; color:#475569; border:1px solid #e2e8f0;">${p} <i class="fa-solid fa-times" style="cursor:pointer; margin-left:4px; color:#94a3b8;" onclick="excludePeer('${p}')"></i></span>`).join('');
                 } else {
                     peerHtml = '<span style="color:#999; font-size:12px;">(目前無其他同仁評分)</span>';
+                }
+
+                if (excludedPeers.length > 0) {
+                    excludedHtml = `
+                        <div style="margin-top:8px; padding-top:8px; border-top:1px dashed #e2e8f0;">
+                            <div style="font-size:11px; color:#94a3b8; margin-bottom:4px;">已排除 (不計入分數):</div>
+                            <div class="tag-container">
+                                ${excludedPeers.map(p => `<span class="tag" style="background:#fee2e2; color:#991b1b; border:1px solid #fecaca; text-decoration:line-through;">${p} <i class="fa-solid fa-rotate-left" style="cursor:pointer; margin-left:4px; color:#dc2626;" title="還原" onclick="restorePeer('${p}')"></i></span>`).join('')}
+                            </div>
+                        </div>
+                    `;
                 }
             }
 
@@ -514,7 +531,6 @@
                     <button class="btn btn-outline" onclick="saveActiveEmployee()">
                         <i class="fa-solid fa-floppy-disk"></i> 暫存設定
                     </button>
-                    <!-- Download button logic is in top bar -->
                 </div>
 
                 <div class="editor-panel">
@@ -552,6 +568,7 @@
                                 <div class="tag-container" style="max-height:100px; overflow-y:auto;">
                                     ${peerHtml}
                                 </div>
+                                ${excludedHtml}
                             </div>
                         </div>
                     </div>
@@ -638,6 +655,24 @@
                     renderEditor();
                 }
             }, "新增主管");
+        }
+
+        // Peer Exclusion Actions
+        window.excludePeer = (name) => {
+            if (!currentConfig.excluded_peers) currentConfig.excluded_peers = [];
+            if (!currentConfig.excluded_peers.includes(name)) {
+                currentConfig.excluded_peers.push(name);
+                renderEditor();
+            }
+        }
+        window.restorePeer = (name) => {
+            if (currentConfig.excluded_peers) {
+                const idx = currentConfig.excluded_peers.indexOf(name);
+                if (idx > -1) {
+                    currentConfig.excluded_peers.splice(idx, 1);
+                    renderEditor();
+                }
+            }
         }
 
         // Rules Actions

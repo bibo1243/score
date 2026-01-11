@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8">
+    <title>評分關係管理系統</title>
+    <link rel="stylesheet" href="rating-management.css">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="data-processor.js"></script>
+</head>
+
+<body>
+    <div class="header">
+        <div class="logo">評分關係管理系統</div>
+        <a href="index.html" class="nav-link">← 返回首頁</a>
+    </div>
+    <div id="authContainer" class="auth-container">
+        <h2>請輸入密碼以進入管理頁面</h2>
+        <input type="password" id="adminPassword" placeholder="密碼" />
+        <button id="loginBtn">登入</button>
+        <p id="errorMsg" class="error-msg"></p>
+    </div>
+    <div id="managementApp" class="app hidden">
+        <div id="unitFilters" class="filters">
+            <label for="orgSelect">機構：</label>
+            <select id="orgSelect">
+                <option value="all">全部</option>
+            </select>
+            <label for="unitSelect">單位：</label>
+            <select id="unitSelect">
+                <option value="all">全部</option>
+            </select>
+        </div>
+        <div id="employeeContainer" class="employee-container"></div>
+    </div>
+    <script src="rating-management.js"></script>
+</body>
+
+</html>
