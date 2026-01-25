@@ -540,20 +540,6 @@
             }
         }
 
-        function customRound(num) {
-            // Rule: Decimal > 0.01 rounds up to next integer
-            // Decimal <= 0.01 rounds down to integer
-            const integerPart = Math.floor(num);
-            const decimalPart = num - integerPart;
-            // Use logical precision to avoid floating point errors (e.g. 0.010000001)
-            const safeDecimal = Number(decimalPart.toFixed(4));
-
-            if (safeDecimal > 0.01) {
-                return integerPart + 1;
-            }
-            return integerPart;
-        }
-
         function renderList() {
             const orgFilter = document.getElementById('orgFilter').value;
             const unitFilter = document.getElementById('unitFilter').value;
@@ -602,19 +588,21 @@
                 const bonusVal = (serverBonus !== undefined) ? serverBonus : (localBonus || 0);
 
                 const scores = scoreData[emp.name] || {};
-                const baseScore = parseFloat(scores.average_score || 0); // H2 Score
+                const baseScore = parseFloat(scores.average_score || 0); // H2 Base Score
 
                 // H1 Score Logic
                 const h1Val = h1Scores[emp.name];
                 const hasH1 = (h1Val !== undefined && h1Val !== null && h1Val !== '');
                 const h1Score = hasH1 ? parseFloat(h1Val) : 0;
 
+                // H2 Calculation (Base + Bonus)
+                const h2Total = baseScore + parseFloat(bonusVal);
+
                 // Final Calculation
                 let finalScoreDisplay = '尚缺「上半年之總分」';
 
                 if (hasH1 && baseScore > 0) {
-                    // Formula: ((H2 + Bonus) * 0.6) + (H1 * 0.4)
-                    const h2Total = baseScore + parseFloat(bonusVal);
+                    // Formula: (H2_Total * 0.6) + (H1 * 0.4)
                     const finalVal = (h2Total * 0.6) + (h1Score * 0.4);
 
                     // Apply special rounding rule
@@ -647,57 +635,74 @@
                 });
 
                 html += `</div> <!-- End assessment-content -->
-                        <div class="score-sidebar">
+                        <div class="score-sidebar" style="background-color: #f8fafc; padding: 15px;">
                             
-                            <a href="index.html?search=${encodeURIComponent(emp.name)}" target="_blank" style="text-decoration:none; color:inherit; display:block;">
-                            <div class="score-card" style="border:1px solid #eee; border-radius:12px; padding:20px; transition: transform 0.2s; margin-bottom: 20px;">
-                                <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:15px;">
-                                    <div>
-                                        <h3 style="margin:0; font-size:18px; color:#1e293b;">下半年考核總分 (60%)</h3>
-                                        <div style="margin-top:8px;">
-                                            <span style="background:${orgColor.bg}; color:${orgColor.text}; padding:4px 10px; border-radius:6px; font-size:13px; font-weight:500;">${emp.org}</span>
-                                            ${unitBadge}
-                                        </div>
-                                    </div>
-                                    <div style="width:50px; height:50px; background:#f1f5f9; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#475569; font-size:16px; font-weight:bold;">
-                                        ${baseScore > 0 ? baseScore.toFixed(0) : '-'}
-                                    </div>
-                                </div>
-                                <div style="background:#f8fafc; border-radius:8px; padding:12px; font-size:13px; color:#64748b;">${getDetailedBreakdown(scores)}</div>
-                            </div>
-                            </a>
-
-                            <!-- H1 Score Input Section -->
-                            <div class="bonus-section" style="background: #fff7ed; border-color: #ffedd5; margin-bottom: 20px;">
+                            <!-- 1. H1 Score Section (Moved to TOP) -->
+                            <div class="bonus-section" style="background: #fff7ed; border: 1px solid #ffedd5; margin-bottom: 20px;">
                                 <div class="bonus-input-group">
                                     <span class="bonus-label" style="color: #9a3412;">上半年總分 (40%)</span>
                                     <input type="number" class="bonus-input" id="h1-${index}" 
                                         min="0" max="100" step="0.01"
                                         value="${hasH1 ? h1Val : ''}" 
-                                        placeholder="輸入分數"
+                                        placeholder="輸入"
                                         onchange="updateH1Score('${emp.name}', ${index}, this.value)">
                                 </div>
                                 <div class="raters-list" style="color: #c2410c;">請輸入上半年總分（若無請留空）。</div>
                             </div>
-                            
-                            <!-- Bonus Section -->
-                            <div class="bonus-section">
-                                <div class="bonus-input-group">
-                                    <span class="bonus-label">加分 (Max 3)</span>
-                                    <input type="number" class="bonus-input" id="bonus-${index}" 
-                                        min="0" max="3" step="1"
-                                        value="${bonusVal}" 
-                                        onchange="updateBonus('${emp.name}', ${index}, ${baseScore}, this.value)">
+
+                            <!-- 2. H2 Score Section (Combined) -->
+                            <a href="index.html?search=${encodeURIComponent(emp.name)}" target="_blank" style="text-decoration:none; color:inherit; display:block;">
+                            <div class="score-card" style="border:1px solid #e2e8f0; border-radius:12px; padding:15px; margin-bottom: 20px; background: white;">
+                                
+                                <!-- Header -->
+                                <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:10px;">
+                                    <div>
+                                        <h3 style="margin:0; font-size:18px; color:#1e293b;">下半年總考核 (60%)</h3>
+                                        <div style="margin-top:5px;">
+                                            <span style="background:${orgColor.bg}; color:${orgColor.text}; padding:4px 8px; border-radius:4px; font-size:12px;">${emp.org}</span>
+                                            ${unitBadge}
+                                        </div>
+                                    </div>
+                                    <div style="width:45px; height:45px; background:#f1f5f9; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#475569; font-size:18px; font-weight:bold;">
+                                        ${baseScore > 0 ? baseScore.toFixed(0) : '-'}
+                                    </div>
                                 </div>
                                 
-                                <div style="margin-top: 15px; border-top: 1px dashed #eee; padding-top: 10px;">
-                                    <div class="final-score-row">
-                                        <span class="final-score-label">最終總分</span>
-                                        <span class="final-score-value" id="final-${index}">${finalScoreDisplay}</span>
+                                <!-- Detail Breakdown -->
+                                <div style="background:#f8fafc; border-radius:8px; padding:10px; font-size:12px; color:#64748b; margin-bottom: 15px;">
+                                    ${getDetailedBreakdown(scores)}
+                                </div>
+
+                                <!-- Bonus Section (Moved INSIDE H2) -->
+                                <div style="border-top: 1px dashed #cbd5e1; padding-top: 15px; margin-top: 10px;">
+                                    <div class="bonus-input-group" style="justify-content: space-between;">
+                                        <span class="bonus-label" style="font-size: 15px; color: #64748b;">+ 下半年加分</span>
+                                        <input type="number" class="bonus-input" id="bonus-${index}" 
+                                            style="width: 70px; border-color: #cbd5e1; color: #0f172a;"
+                                            min="0" max="3" step="1"
+                                            value="${bonusVal}" 
+                                            onclick="event.preventDefault();"
+                                            onchange="updateBonus('${emp.name}', ${index}, ${baseScore}, this.value)">
                                     </div>
-                                    <div style="font-size: 11px; color: #94a3b8; margin-top: 5px; text-align: right;">
-                                        (下半年總分 + 加分) × 60% + 上半年總分 × 40%
-                                    </div>
+                                </div>
+
+                                <!-- H2 Subtotal (NEW) -->
+                                <div style="background: #eef2ff; padding: 10px; border-radius: 6px; margin-top: 10px; display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="font-weight: bold; color: #3730a3; font-size: 14px;">下半年合計</span>
+                                    <span style="font-weight: bold; color: #3730a3; font-size: 18px;" id="h2-total-${index}">${baseScore > 0 ? h2Total.toFixed(0) : '-'}</span>
+                                </div>
+                                
+                            </div>
+                            </a>
+                            
+                            <!-- 3. Final Score Section -->
+                            <div class="bonus-section" style="background: white; border: 2px solid #edaf78;">
+                                <div class="final-score-row">
+                                    <span class="final-score-label">最終總分</span>
+                                    <span class="final-score-value" id="final-${index}">${finalScoreDisplay}</span>
+                                </div>
+                                <div style="font-size: 11px; color: #94a3b8; margin-top: 5px; text-align: right;">
+                                    (下半年合計 × 60%) + (上半年總分 × 40%)
                                 </div>
                             </div>
 
@@ -801,6 +806,10 @@
 
                 const result = calculateFinalRound(final);
                 finalDisplay = `${result.rounded} <span style="font-size:0.6em; color:#94a3b8; font-weight:normal;">(${result.original})</span>`;
+
+                // Update H2 Total UI
+                const h2TotalEl = document.getElementById(`h2-total-${idx}`);
+                if (h2TotalEl) h2TotalEl.innerText = h2Total.toFixed(0);
             }
 
             const finalEl = document.getElementById(`final-${idx}`);
