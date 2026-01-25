@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>自我考核表拆分</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .page-container {
+            padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .nav-link {
+            text-decoration: none;
+            color: #4a90e2;
+            font-weight: bold;
+            margin-left: auto;
+        }
+
+        .employee-assessment-card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+            overflow: hidden;
+            border: 1px solid #eee;
+        }
+
+        .card-header {
+            background-color: #f8fbff;
+            padding: 15px 20px;
+            border-bottom: 1px solid #eaeaea;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .employee-name {
+            font-size: 20px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .employee-org {
+            color: #666;
+            font-size: 14px;
+            background: #eee;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+        /* Split Layout */
+        .card-body {
+            display: flex;
+            flex-wrap: wrap;
+            padding: 0;
+        }
+
+        .assessment-content {
+            flex: 1;
+            min-width: 60%;
+            padding: 20px;
+            border-right: 1px solid #eee;
+        }
+
+        .score-sidebar {
+            flex: 0 0 350px;
+            padding: 20px;
+            background-color: #fafafa;
+            border-left: 1px solid #eee;
+        }
+
+        @media (max-width: 900px) {
+            .score-sidebar {
+                flex: 100%;
+                border-left: none;
+                border-top: 1px solid #eee;
+            }
+
+            .assessment-content {
+                border-right: none;
+            }
+        }
+
+        /* Assessment Styles */
+        .section-block {
+            margin-bottom: 25px;
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 10px;
+            border-left: 4px solid #4a90e2;
+            padding-left: 10px;
+        }
+
+        .qa-item {
+            margin-bottom: 15px;
+        }
+
+        .question {
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+
+        .answer {
+            background: #f9f9f9;
+            padding: 10px;
+            border-radius: 6px;
+            white-space: pre-wrap;
+            line-height: 1.6;
+            color: #333;
+        }
+
+        /* Score Dashboard Styles */
+        .score-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            margin-bottom: 20px;
+        }
+
+        .score-title {
+            font-weight: bold;
+            color: #333;
+            border-bottom: 2px solid #efefef;
+            padding-bottom: 5px;
+            margin-bottom: 10px;
+        }
+
+        .score-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .score-label {
+            color: #666;
+        }
+
+        .score-value {
+            font-weight: bold;
+            color: #333;
+        }
+
+        .main-score {
+            font-size: 18px;
+            color: #2c3e50;
+            border-top: 1px dashed #ccc;
+            padding-top: 5px;
+            margin-top: 5px;
+        }
+
+        .bonus-section {
+            background: #fff8f0;
+            border: 1px solid #ffe0b2;
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .bonus-input-group {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .bonus-label {
+            font-weight: bold;
+            color: #d35400;
+            font-size: 16px;
+        }
+
+        .bonus-input {
+            width: 80px;
+            padding: 5px;
+            font-size: 18px;
+            text-align: center;
+            border: 2px solid #edaf78;
+            border-radius: 4px;
+            color: #d35400;
+            font-weight: bold;
+        }
+
+        .final-score-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 2px solid #edaf78;
+        }
+
+        .final-score-label {
+            font-weight: bold;
+            color: #333;
+        }
+
+        .final-score-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #e67e22;
+        }
+
+        .raters-list {
+            margin-top: 5px;
+            font-size: 12px;
+            color: #888;
+            line-height: 1.4;
+        }
+
+        .loading {
+            padding: 40px;
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <div class="logo">自我考核與分數對照表</div>
+        <a href="index.html" class="nav-link">← 返回首頁</a>
+    </div>
+
+    <div class="page-container">
+        <div class="controls">
+            <div style="display:flex; gap:15px; align-items:center; flex-wrap:wrap;">
+                <div class="filter-group">
+                    <label for="orgFilter">機構：</label>
+                    <select id="orgFilter" style="padding:5px; border-radius:4px; border:1px solid #ccc;">
+                        <option value="all">全部</option>
+                        <option value="基金會">基金會</option>
+                        <option value="兒少之家">兒少之家</option>
+                        <option value="少年家園">少年家園</option>
+                        <option value="諮商所">諮商所</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label for="unitFilter">組別：</label>
+                    <select id="unitFilter"
+                        style="padding:5px; border-radius:4px; border:1px solid #ccc; min-width:100px;">
+                        <option value="all">全部</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label for="nameFilter">姓名：</label>
+                    <input list="nameList" id="nameFilter" placeholder="搜尋姓名..."
+                        style="padding:5px; border-radius:4px; border:1px solid #ccc; width:120px;">
+                    <datalist id="nameList"></datalist>
+                </div>
+            </div>
+
+            <div style="margin-left:auto; font-size:13px; color:#666;">
+                * 系統分數會自動同步，加分上限為 3 分
+            </div>
+        </div>
+
+        <div id="contentArea">
+            <div class="loading">載入資料中...</div>
+        </div>
+    </div>
+
+    <!-- Scripts needed for score calculation -->
+    <script src="supabase-client.js"></script>
+    <script src="data-processor.js"></script>
+    <script src="feedback-utils.js"></script>
+    <script>
+        let assessmentData = [];
+        let scoreData = {};
+        let bonuses = {};
+        let staffDir = {};
+
+        const SECTIONS = [
+            {
+                title: "壹、自我成長",
+                items: [{ q: "請以一個您的實際經驗/故事，分享您在慈馨家工作，所感受到對於您的自我成長？", colIndex: 51 }]
+            },
+            {
+                title: "貳、專業成長",
+                items: [{ q: "請以一個您的實際經驗/故事，分享您在慈馨家工作，所感受到的專業成長？", colIndex: 52 }]
+            },
+            {
+                title: "参、專業表現",
+                items: [
+                    { q: "一、請為自己設定2〜4項關鍵成果（小目標）作為檢核。", colIndex: 53 },
+                    { q: "二、請以「百分比」自評前項關鍵成果（小目標）的完成率。", colIndex: 54 },
+                    { q: "三、請具體回饋自己表現良好的部分。", colIndex: 55 },
+                    { q: "四、請檢視自己的表現，設定接續半年可持續提升自己的具體做法。", colIndex: 56 }
+                ]
+            }
+        ];
+
+        async function init() {
+            // Safety timeout to prevent infinite loading
+            setTimeout(() => {
+                const container = document.getElementById('contentArea');
+                if (container && container.querySelector('.loading')) {
+                    console.warn("Loading timed out, forcing render");
+                    if (assessmentData.length > 0) {
+                        setupFilters();
+                        renderList();
+                    } else {
+                        container.innerHTML = '<div class="loading" style="color:red">載入逾時，請檢查網路連線或稍後再試。</div>';
+                    }
+                }
+            }, 8000); // 8 seconds timeout
+
+            staffDir = await loadStaffDirectory();
+
+            await Promise.all([
+                loadAssessmentData(),
+                loadScoreData(),
+                loadBonuses()
+            ]);
+
+            // Setup new filters
+            setupFilters();
+            renderList();
+        }
+
+        function setupFilters() {
+            const orgSelect = document.getElementById('orgFilter');
+            const unitSelect = document.getElementById('unitFilter');
+            const nameInput = document.getElementById('nameFilter');
+
+            orgSelect.addEventListener('change', () => {
+                updateFilters('org');
+                renderList();
+            });
+
+            unitSelect.addEventListener('change', () => {
+                renderList();
+            });
+
+            nameInput.addEventListener('input', () => {
+                renderList();
+            });
+
+            // Initial population
+            updateFilters('init');
+        }
+
+        function updateFilters(source) {
+            const orgVal = document.getElementById('orgFilter').value;
+            const unitSelect = document.getElementById('unitFilter');
+            const nameList = document.getElementById('nameList');
+            const currentUnit = unitSelect.value;
+
+            // 1. Update Unit Options (if source is 'init' or 'org')
+            if (source === 'init' || source === 'org') {
+                const units = new Set();
+                assessmentData.forEach(d => {
+                    if (orgVal === 'all' || d.org === orgVal) {
+                        // Exclude unit if it is same as org name (redundant)
+                        if (d.unit && d.unit !== d.org) units.add(d.unit);
+                    }
+                });
+
+                // Sort units custom order if needed, or alphabetical
+                const sortedUnits = Array.from(units).sort();
+
+                unitSelect.innerHTML = '<option value="all">全部</option>';
+                sortedUnits.forEach(u => {
+                    unitSelect.innerHTML += `<option value="${u}">${u}</option>`;
+                });
+
+                // Try to keep selection if valid
+                if (units.has(currentUnit)) {
+                    unitSelect.value = currentUnit;
+                } else {
+                    unitSelect.value = 'all';
+                }
+            }
+
+            // 2. Update Name Datalist
+            // Filter available names based on current Org & Unit selection
+            const unitVal = unitSelect.value;
+            nameList.innerHTML = '';
+
+            assessmentData.filter(d => {
+                const matchOrg = orgVal === 'all' || d.org === orgVal;
+                const matchUnit = unitVal === 'all' || d.unit === unitVal;
+                // Exclude managers from list - RESTORED FOR ALL
+                // const MANAGERS_TO_EXCLUDE = ['李冠葦', '廖振杉', '廖慧雯', '楊顗帆', '陳淑錡', '陳宛妤', '鍾宜珮', '高靜華', '白梅芳'];
+                return matchOrg && matchUnit;
+            }).forEach(d => {
+                nameList.innerHTML += `<option value="${d.name}">`;
+            });
+        }
+
+        async function loadBonuses() {
+            try {
+                const res = await fetch('/api/bonuses');
+                if (res.ok) {
+                    bonuses = await res.json();
+                }
+            } catch (e) {
+                console.log("Could not load bonuses from server, using local storage");
+            }
+        }
+
+        async function loadScoreData() {
+            // Priority 1: Local server API (for localhost)
+            try {
+                const response = await fetch('/api/data');
+                if (response.ok) {
+                    const data = await response.json();
+                    data.forEach(emp => {
+                        scoreData[emp.name] = emp;
+                    });
+                    console.log("Loaded from local API");
+                    return;
+                }
+            } catch (e) {
+                console.log("Local API unavailable, trying Supabase");
+            }
+
+            // Priority 2: Real-time Supabase data (for GitHub Pages)
+            try {
+                if (typeof loadProcessedData === 'function') {
+                    const data = await loadProcessedData();
+                    data.forEach(emp => {
+                        scoreData[emp.name] = emp;
+                    });
+                    console.log("Loaded real-time data from Supabase");
+                    return;
+                }
+            } catch (e) {
+                console.log("Supabase load failed, trying static data", e);
+            }
+
+            // Priority 3: Static fallback (processed_data.json)
+            try {
+                const res = await fetch('processed_data.json');
+                if (res.ok) {
+                    const data = await res.json();
+                    data.forEach(emp => {
+                        scoreData[emp.name] = emp;
+                    });
+                    console.log("Loaded static processed data");
+                }
+            } catch (e) {
+                console.error("Failed to load any score data", e);
+            }
+        }
+
+        async function loadAssessmentData() {
+            try {
+                const res = await fetch('feedback.csv?t=' + new Date().getTime());
+                if (!res.ok) throw new Error("無法讀取 feedback.csv");
+                const text = await res.text();
+                const rows = parseCSV(text);
+
+                if (rows.length < 2) return;
+
+                const headers = rows[0].map(h => h.trim());
+                const nameIdx = headers.indexOf('姓名');
+
+                assessmentData = rows.slice(1).map(r => {
+                    const name = r[nameIdx] ? r[nameIdx].trim() : '未知';
+                    const employeeInfo = staffDir[name] || { org: '未分類' };
+
+                    const answers = {};
+                    SECTIONS.forEach(sec => {
+                        sec.items.forEach(item => {
+                            answers[item.colIndex] = r[item.colIndex] || '';
+                        });
+                    });
+
+                    return {
+                        name: name,
+                        org: employeeInfo.org,
+                        unit: employeeInfo.unit || '',
+                        answers: answers
+                    };
+                }).filter(d => d.name !== '未知');
+
+            } catch (e) {
+                document.getElementById('contentArea').innerHTML = `<div class="loading" style="color:red">載入失敗: ${e.message}</div>`;
+            }
+        }
+
+        function renderList() {
+            const orgFilter = document.getElementById('orgFilter').value;
+            const unitFilter = document.getElementById('unitFilter').value;
+            const nameFilter = document.getElementById('nameFilter').value.trim();
+            const container = document.getElementById('contentArea');
+
+            // Institution heads and managers to exclude - RESTORED FOR ALL
+            // const MANAGERS_TO_EXCLUDE = ['李冠葦', '廖振杉', '廖慧雯', '楊顗帆', '陳淑錡', '陳宛妤', '鍾宜珮', '高靜華', '白梅芳'];
+
+            let filtered = assessmentData.filter(d => {
+                // Skip managers - REMOVED
+                // if (MANAGERS_TO_EXCLUDE.includes(d.name)) return false;
+
+                // Org filter
+                if (orgFilter !== 'all' && d.org !== orgFilter) return false;
+
+                // Unit filter
+                if (unitFilter !== 'all' && d.unit !== unitFilter) return false;
+
+                // Name filter (Search)
+                if (nameFilter && !d.name.includes(nameFilter)) return false;
+
+                return true;
+            });
+
+            if (filtered.length === 0) {
+                container.innerHTML = '<div class="loading">無資料顯示</div>';
+                return;
+            }
+
+            // Sort data: Org -> Unit -> Name
+            filtered.sort((a, b) => {
+                if (a.org !== b.org) return a.org.localeCompare(b.org);
+                if (a.unit !== b.unit) {
+                    // Put empty unit at end
+                    if (!a.unit) return 1;
+                    if (!b.unit) return -1;
+                    return a.unit.localeCompare(b.unit);
+                }
+                return a.name.localeCompare(b.name);
+            });
+
+            let html = '';
+            let currentUnitGroup = null;
+
+            filtered.forEach((emp, index) => {
+                // Insert Unit Header if changed
+                // Display separation header for better readability
+                const displayUnit = emp.unit || '其他';
+                const displayGroupKey = `${emp.org} - ${displayUnit}`;
+
+                if (displayGroupKey !== currentUnitGroup) {
+                    currentUnitGroup = displayGroupKey;
+                    html += `<div class="group-header" style="
+                        margin: 30px 0 15px 0; 
+                        padding: 8px 15px; 
+                        background: #e0e7ff; 
+                        color: #3730a3; 
+                        border-radius: 6px; 
+                        font-weight: bold; 
+                        font-size: 1.1em;
+                        border-left: 5px solid #4f46e5;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                    ">
+                        <span>${emp.org} <i class="fa-solid fa-chevron-right" style="font-size:0.8em; margin:0 5px;"></i> ${displayUnit}</span>
+                    </div>`;
+                }
+
+                // Get saved bonus
+                // Prioritize Server Bonus -> LocalStorage -> 0
+                const serverBonus = bonuses[emp.name];
+                const localBonus = localStorage.getItem(`assessment_bonus_${emp.name}`);
+                const bonusVal = (serverBonus !== undefined) ? serverBonus : (localBonus || 0);
+
+                // Get score data
+                const scores = scoreData[emp.name] || {};
+                const baseScore = parseFloat(scores.average_score || 0); // Use average_score like index.html
+
+                // If baseScore is 0 (missing data), handle gracefully
+                let finalScoreDisplay = '-';
+                if (baseScore > 0) {
+                    finalScoreDisplay = (baseScore + parseFloat(bonusVal)).toFixed(2);
+                }
+
+                html += `
+                <div class="employee-assessment-card">
+                    <div class="card-header">
+                        <div class="employee-name">${emp.name}</div>
+                        <div class="employee-org">${emp.org}</div>
+                    </div>
+                    <div class="card-body">
+                        <!-- Left: Assessment Content -->
+                        <div class="assessment-content">
+                `;
+
+                SECTIONS.forEach(sec => {
+                    html += `<div class="section-block">
+                        <div class="section-title">${sec.title}</div>`;
+
+                    sec.items.forEach(item => {
+                        const ans = emp.answers[item.colIndex];
+                        if (ans) {
+                            html += `
+                            <div class="qa-item">
+                                <div class="question">${item.q}</div>
+                                <div class="answer">${escapeHtml(ans)}</div>
+                            </div>`;
+                        } else {
+                            html += `<div class="qa-item"><div class="question">${item.q}</div><div class="answer" style="color:#ccc;">(未填寫)</div></div>`;
+                        }
+                    });
+
+                    html += `</div>`; // End section-block
+                });
+
+                html += `</div> <!-- End assessment-content -->`;
+
+                // Right: Score Dashboard (Employee Card Style)
+                // Colors mimicking homepage badges
+                const orgColor = getOrgColor(emp.org);
+                const unitBadge = emp.unit ? `<span style="background:#eef2ff; color:#4f46e5; padding:2px 8px; border-radius:4px; font-size:12px; margin-right:5px;">${emp.unit}</span>` : '';
+
+                html += `
+                        <div class="score-sidebar">
+                            <a href="index.html?search=${encodeURIComponent(emp.name)}" target="_blank" style="text-decoration:none; color:inherit; display:block;">
+                            <div class="score-card" style="border:1px solid #eee; border-radius:12px; padding:20px; transition: transform 0.2s;">
+                                <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:15px;">
+                                    <div>
+                                        <h3 style="margin:0; font-size:22px; color:#1e293b;">${emp.name}</h3>
+                                        <div style="margin-top:8px;">
+                                            <span style="background:${orgColor.bg}; color:${orgColor.text}; padding:4px 10px; border-radius:6px; font-size:13px; font-weight:500;">${emp.org}</span>
+                                            ${unitBadge}
+                                        </div>
+                                    </div>
+                                    <div style="width:60px; height:60px; background:linear-gradient(135deg, #4f46e5, #818cf8); border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-size:20px; font-weight:bold; box-shadow:0 4px 6px -1px rgba(79, 70, 229, 0.3);">
+                                        ${baseScore > 0 ? baseScore.toFixed(0) : '-'}
+                                    </div>
+                                </div>
+                                
+                                <div style="background:#f8fafc; border-radius:8px; padding:12px; font-size:13px; color:#64748b; line-height:1.6; margin-bottom:15px;">
+                                    ${getDetailedBreakdown(scores)}
+                                </div>
+
+                                <div style="display:flex; justify-content:space-between; align-items:center;">
+                                    <div style="display:flex; gap:15px; font-size:14px; font-weight:500; color:#475569;">
+                                        <span><i class="fa-solid fa-users" style="color:#cbd5e1; margin-right:4px;"></i> ${scores.rater_count || 0} 人評分</span>
+                                    </div>
+                                    <div style="font-size:12px; color:#94a3b8;">
+                                        點擊查看詳情 <i class="fa-solid fa-arrow-right"></i>
+                                    </div>
+                                </div>
+                            </div>
+                            </a>
+
+                            <!-- Edit Bonus Section -->
+                            <div class="bonus-section" style="margin-top:20px;">
+                                <div class="bonus-input-group">
+                                    <span class="bonus-label">加分 (Max 3)</span>
+                                    <input type="number" class="bonus-input" id="bonus-${index}" 
+                                        min="0" max="3" step="1"
+                                        value="${bonusVal}" 
+                                        onchange="updateBonus('${emp.name}', ${index}, ${baseScore}, this.value)">
+                                </div>
+                                <div class="raters-list">請根據左側自我考核內容，給予適當加分（限整數）。</div>
+                                
+                                <div class="final-score-row">
+                                    <span class="final-score-label">最終總分</span>
+                                    <span class="final-score-value" id="final-${index}">${finalScoreDisplay}</span>
+                                </div>
+                            </div>
+                        </div> <!-- End score-sidebar -->
+                    </div> <!-- End card-body -->
+                </div>`;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function getOrgColor(org) {
+            // Returns basic colors for badges
+            if (org === '兒少之家') return { bg: '#eff6ff', text: '#2563eb' }; // Blue
+            if (org === '少年家園') return { bg: '#fef2f2', text: '#dc2626' }; // Red
+            if (org === '諮商所') return { bg: '#ecfdf5', text: '#059669' }; // Green
+            if (org === '基金會') return { bg: '#fdf4ff', text: '#c026d3' }; // Purple
+            return { bg: '#f1f5f9', text: '#475569' }; // Gray
+        }
+
+        function getDetailedBreakdown(scores) {
+            if (!scores.average_score) return "尚無詳細評分資料";
+            // Show Cat1, Cat2, Cat3, Total from Supabase data
+            // API returns: cat1_rounded, cat2_rounded, cat3_rounded, average_score
+            const cat1 = scores.cat1_rounded !== undefined ? scores.cat1_rounded : '-';
+            const cat2 = scores.cat2_rounded !== undefined ? scores.cat2_rounded : '-';
+            const cat3 = scores.cat3_rounded !== undefined ? scores.cat3_rounded : '-';
+            const total = scores.average_score !== undefined ? scores.average_score : '-';
+
+            return `
+                <div style="display:flex; justify-content:space-between; gap:10px; text-align:center;">
+                    <div style="flex:1; background:#fff; padding:10px; border-radius:8px; border:1px solid #e2e8f0;">
+                        <div style="font-size:11px; color:#94a3b8; margin-bottom:4px;">第一大類</div>
+                        <div style="font-size:18px; font-weight:bold; color:#4f46e5;">${cat1}</div>
+                        <div style="font-size:10px; color:#cbd5e1;">(滿分40)</div>
+                    </div>
+                    <div style="flex:1; background:#fff; padding:10px; border-radius:8px; border:1px solid #e2e8f0;">
+                        <div style="font-size:11px; color:#94a3b8; margin-bottom:4px;">第二大類</div>
+                        <div style="font-size:18px; font-weight:bold; color:#10b981;">${cat2}</div>
+                        <div style="font-size:10px; color:#cbd5e1;">(滿分30)</div>
+                    </div>
+                    <div style="flex:1; background:#fff; padding:10px; border-radius:8px; border:1px solid #e2e8f0;">
+                        <div style="font-size:11px; color:#94a3b8; margin-bottom:4px;">第三大類</div>
+                        <div style="font-size:18px; font-weight:bold; color:#f59e0b;">${cat3}</div>
+                        <div style="font-size:10px; color:#cbd5e1;">(滿分30)</div>
+                    </div>
+                </div>
+                <div style="margin-top:10px; text-align:center; padding:8px; background:#fff; border-radius:8px; border:1px solid #e2e8f0;">
+                    <span style="font-size:12px; color:#64748b;">總分：</span>
+                    <span style="font-size:20px; font-weight:bold; color:#1e293b;">${total}</span>
+                    <span style="font-size:11px; color:#94a3b8;"> / 100</span>
+                </div>
+            `;
+        }
+
+        window.updateBonus = async function (name, idx, baseScore, val) {
+            let numVal = parseInt(val, 10);
+            if (isNaN(numVal)) numVal = 0;
+
+            if (numVal > 3) { numVal = 3; document.getElementById(`bonus-${idx}`).value = 3; }
+            if (numVal < 0) { numVal = 0; document.getElementById(`bonus-${idx}`).value = 0; }
+
+            // 1. Save to Local Storage
+            localStorage.setItem(`assessment_bonus_${name}`, numVal);
+
+            // 2. Save to Server (Strategy Pattern)
+            let saved = false;
+
+            // Strategy A: Local API (for localhost with server.py)
+            try {
+                const res = await fetch('/api/save_bonus', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name, bonus: numVal })
+                });
+                if (res.ok) saved = true;
+            } catch (e) {
+                console.log("Local API failed, trying direct Supabase connection");
+            }
+
+            // Strategy B: Direct Supabase (for GitHub Pages)
+            if (!saved) {
+                try {
+                    await saveBonusToSupabase(name, numVal);
+                    saved = true;
+                    console.log("Saved to Supabase directly");
+                } catch (e) {
+                    console.error("Failed to save bonus to server/db", e);
+                    // Optional: alert user
+                }
+            }
+
+            // 3. Update UI
+            if (baseScore > 0) {
+                const final = (baseScore + numVal).toFixed(2);
+                document.getElementById(`final-${idx}`).innerText = final;
+            }
+        }
+
+        async function saveBonusToSupabase(name, bonus) {
+            // Logic mimicking server.py's _SYSTEM_BONUS_ handling
+            const rater = '_SYSTEM_BONUS_';
+            const ratee = name;
+
+            // Check if record exists
+            const checkUrl = `scores?ratee=eq.${encodeURIComponent(ratee)}&rater=eq.${encodeURIComponent(rater)}&select=id`;
+            const existing = await supabaseRequest(checkUrl);
+
+            if (existing && existing.length > 0) {
+                // Update (PATCH)
+                const updateUrl = `scores?ratee=eq.${encodeURIComponent(ratee)}&rater=eq.${encodeURIComponent(rater)}`;
+                await supabaseRequest(updateUrl, {
+                    method: 'PATCH',
+                    body: { cat1: bonus } // We removed 'total' to avoid generated column issues
+                });
+            } else {
+                // Insert (POST)
+                await supabaseRequest('scores', {
+                    method: 'POST',
+                    body: {
+                        ratee: ratee,
+                        rater: rater,
+                        cat1: bonus,
+                        cat2: 0,
+                        cat3: 0
+                        // total is generated
+                    }
+                });
+            }
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+
+
+        // Event listeners removed here as they are now in setupFilters() inside init()
+
+        init();
+    </script>
+</body>
+
+</html>
