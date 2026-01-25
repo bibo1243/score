@@ -72,6 +72,7 @@ async function processScoresForDisplay(rawScores) {
 
     // 1. Group raters by Ratee
     const employeeRaters = {};
+    const bonuses = {}; // Store system bonuses here
 
     // Reverse map for subordinates list building
     // Manager -> Set of Subordinates
@@ -90,6 +91,13 @@ async function processScoresForDisplay(rawScores) {
     rawScores.forEach(row => {
         const ratee = row.ratee;
         if (!ratee) return;
+
+        // Filter out System Bonus Rater
+        if (row.rater === '_SYSTEM_BONUS_') {
+            bonuses[ratee] = parseFloat(row.cat1) || 0;
+            return; // Do not add to employeeRaters
+        }
+
         if (!employeeRaters[ratee]) employeeRaters[ratee] = [];
 
         const cat1 = parseFloat(row.cat1) || 0;
@@ -120,7 +128,7 @@ async function processScoresForDisplay(rawScores) {
         const currentRaters = employeeRaters[employee];
         const meta = staff[employee] || { org: '未分類', unit: '', section: '' };
 
-        // Config
+        // ... (Config loading omitted for brevity, logic unchanged) ...
         const empConfig = employeeConfigs[employee] || {};
         const myManagers = new Set(empConfig.managers || []);
         const managerWeight = empConfig.manager_weight !== undefined ? empConfig.manager_weight : 0.5;
@@ -132,20 +140,14 @@ async function processScoresForDisplay(rawScores) {
         subRules.forEach(r => subTotalWeight += r.weight);
         let peerWeight = Math.max(0, 1.0 - managerWeight - subTotalWeight);
 
-        // Identify Subordinates for UI display
         const mySubordinates = Array.from(managerToSubordinates[employee] || []).sort();
 
-        // Identify Missing Raters
-        // Logic: Same Unit Peers who are NOT my manager AND NOT my subordinate AND haven't rated me
+        // Identify Missing Raters logic unchanged
         const missingRaters = [];
         if (meta.org !== '未分類') {
-            // This assumes we can iterate all staff to find unit peers. 
-            // Inefficient but fine for small list.
             for (const [sName, sMeta] of Object.entries(staff)) {
                 if (sName !== employee && sMeta.org === meta.org && sMeta.unit === meta.unit) {
-                    // Check exclusion
                     if (!myManagers.has(sName) && !mySubordinates.includes(sName)) {
-                        // Check if rated
                         if (!currentRaters.find(r => r.name === sName)) {
                             missingRaters.push(sName);
                         }
@@ -154,18 +156,13 @@ async function processScoresForDisplay(rawScores) {
             }
         }
 
-        // Calculation Function
+        // Calculation Function logic unchanged
         const calcCategory = (catKey) => {
             let totalWeighted = 0;
             let totalWeightUsed = 0;
             const breakdown = [];
 
             // A. Managers
-            const myManagerWeights = {};
-            // Pre-calculate custom weights if any
-            // (Only if complex logic is needed, but we use simplified logic here for match)
-
-            // Update is_special flag for UI rendering
             currentRaters.forEach(r => {
                 if (myManagers.has(r.name)) {
                     r.is_special = true;
@@ -221,7 +218,7 @@ async function processScoresForDisplay(rawScores) {
                 }
             });
 
-            // C. Peers (exclude managers and excluded_peers)
+            // C. Peers
             const myPeerRaters = currentRaters.filter(r => !myManagers.has(r.name) && !excludedPeers.has(r.name));
             if (myPeerRaters.length > 0) {
                 const avg = myPeerRaters.reduce((s, r) => s + r[catKey], 0) / myPeerRaters.length;
@@ -253,15 +250,17 @@ async function processScoresForDisplay(rawScores) {
         // Skip empty entries if they are just from staff meta but have no data and no ratings
         if (currentRaters.length === 0 && !meta.org) continue;
 
-        // For display table, we usually only show those with ratings or missing raters
-        // But let's include everyone in staffMeta
+        // Add Bonus Handling
+        const bonus = bonuses[employee] || 0;
 
         result.push({
             name: employee,
             org: meta.org,
             unit: meta.unit,
             section: meta.section,
-            average_score: total,
+            average_score: total, // Base score without bonus
+            bonus: bonus,        // Separate bonus field
+            final_score: total + bonus, // Total with bonus
             cat1_avg: c1.score, cat2_avg: c2.score, cat3_avg: c3.score,
             cat1_rounded: cat1Rounded, cat2_rounded: cat2Rounded, cat3_rounded: cat3Rounded,
             rater_count: currentRaters.length,
