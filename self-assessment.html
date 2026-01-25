@@ -609,19 +609,15 @@
                 const hasH1 = (h1Val !== undefined && h1Val !== null && h1Val !== '');
                 const h1Score = hasH1 ? parseFloat(h1Val) : 0;
 
-                // Annual Calculation
-                let annualScoreDisplay = '尚缺「上半年之總分」';
+                // Final Calculation
                 let finalScoreDisplay = '尚缺「上半年之總分」';
-                let annualScore = 0;
 
                 if (hasH1 && baseScore > 0) {
-                    annualScore = (h1Score * 0.4) + (baseScore * 0.6);
-                    annualScoreDisplay = annualScore.toFixed(2);
-
-                    const finalVal = annualScore + parseFloat(bonusVal);
-                    finalScoreDisplay = customRound(finalVal);
+                    // Formula: ((H2 + Bonus) * 0.6) + (H1 * 0.4)
+                    const h2Total = baseScore + parseFloat(bonusVal);
+                    const finalVal = (h2Total * 0.6) + (h1Score * 0.4);
+                    finalScoreDisplay = finalVal.toFixed(2);
                 } else if (baseScore === 0) {
-                    annualScoreDisplay = '-';
                     finalScoreDisplay = '-';
                 }
 
@@ -692,16 +688,12 @@
                                 </div>
                                 
                                 <div style="margin-top: 15px; border-top: 1px dashed #eee; padding-top: 10px;">
-                                    <div class="final-score-row" style="margin-bottom: 5px;">
-                                        <span class="final-score-label" style="font-size: 14px; color: #64748b;">全年度總分</span>
-                                        <span class="final-score-value" style="font-size: 16px; color: #475569;" id="annual-${index}">${annualScoreDisplay}</span>
-                                    </div>
                                     <div class="final-score-row">
                                         <span class="final-score-label">最終總分</span>
                                         <span class="final-score-value" id="final-${index}">${finalScoreDisplay}</span>
                                     </div>
                                     <div style="font-size: 11px; color: #94a3b8; margin-top: 5px; text-align: right;">
-                                        (上半年×40% + 下半年×60%) + 加分
+                                        (下半年總分 + 加分) × 60% + 上半年總分 × 40%
                                     </div>
                                 </div>
                             </div>
@@ -775,28 +767,25 @@
             }
 
             // 3. Update UI
-            // Need to know H1 score to update final accurately
             const h1Val = h1Scores[name];
             const h1Score = (h1Val !== undefined && h1Val !== null) ? parseFloat(h1Val) : 0;
-            const hasH1 = (h1Val !== undefined && h1Val !== null);
+            const hasH1 = (h1Val !== undefined && h1Val !== null && h1Val !== '');
 
             let finalDisplay = '尚缺「上半年之總分」';
-            let annualDisplay = '尚缺「上半年之總分」';
 
             if (hasH1 && baseScore > 0) {
-                const annual = (h1Score * 0.4) + (baseScore * 0.6);
-                annualDisplay = annual.toFixed(2);
-                const final = annual + numVal;
-                finalDisplay = customRound(final);
+                // Formula: (H2 + Bonus) * 0.6 + H1 * 0.4
+                const h2Total = baseScore + numVal;
+                const final = (h2Total * 0.6) + (h1Score * 0.4);
+                finalDisplay = final.toFixed(2);
             }
 
             const finalEl = document.getElementById(`final-${idx}`);
             if (finalEl) finalEl.innerText = finalDisplay;
-            // Also need to update Annual in case logic is shared? Annual is not affected by bonus.
         }
 
         window.updateH1Score = async function (name, idx, val) {
-            let numVal = parseFloat(val); // Float allowed for H1
+            let numVal = parseFloat(val);
             if (isNaN(numVal) || numVal < 0) numVal = 0;
             if (numVal > 100) numVal = 100;
 
@@ -806,30 +795,22 @@
             const scores = scoreData[name] || {};
             const baseScore = parseFloat(scores.average_score || 0);
 
-            let annualScoreDisplay = '尚缺「上半年之總分」';
             let finalScoreDisplay = '尚缺「上半年之總分」';
 
-            if (baseScore > 0) { // Assuming if we are inputting H1, H1 is 'present'
-                // But if input is cleared (val === ''), we should handle that.
-                // For now, assume inputting number implies presence.
-                const annualScore = (numVal * 0.4) + (baseScore * 0.6);
-                annualScoreDisplay = annualScore.toFixed(2);
-
+            if (baseScore > 0) {
                 const bonusInput = document.getElementById(`bonus-${idx}`);
                 const bonusVal = bonusInput ? parseFloat(bonusInput.value || 0) : 0;
 
-                const finalVal = annualScore + bonusVal;
-                finalScoreDisplay = customRound(finalVal);
+                // Formula: (H2 + Bonus) * 0.6 + H1 * 0.4
+                const h2Total = baseScore + bonusVal;
+                const finalVal = (h2Total * 0.6) + (numVal * 0.4);
+                finalScoreDisplay = finalVal.toFixed(2);
             }
-
-            const annualEl = document.getElementById(`annual-${idx}`);
-            if (annualEl) annualEl.innerText = annualScoreDisplay;
 
             const finalEl = document.getElementById(`final-${idx}`);
             if (finalEl) finalEl.innerText = finalScoreDisplay;
 
             try {
-                // Save H1
                 await saveSystemScoreToSupabase(name, numVal, '_SYSTEM_H1_');
             } catch (e) {
                 console.error("Save H1 Failed", e);
