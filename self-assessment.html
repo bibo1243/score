@@ -540,6 +540,20 @@
             }
         }
 
+        function customRound(num) {
+            // Rule: Decimal > 0.01 rounds up to next integer
+            // Decimal <= 0.01 rounds down to integer
+            const integerPart = Math.floor(num);
+            const decimalPart = num - integerPart;
+            // Use logical precision to avoid floating point errors (e.g. 0.010000001)
+            const safeDecimal = Number(decimalPart.toFixed(4));
+
+            if (safeDecimal > 0.01) {
+                return integerPart + 1;
+            }
+            return integerPart;
+        }
+
         function renderList() {
             const orgFilter = document.getElementById('orgFilter').value;
             const unitFilter = document.getElementById('unitFilter').value;
@@ -605,7 +619,7 @@
                     annualScoreDisplay = annualScore.toFixed(2);
 
                     const finalVal = annualScore + parseFloat(bonusVal);
-                    finalScoreDisplay = finalVal.toFixed(2);
+                    finalScoreDisplay = customRound(finalVal);
                 } else if (baseScore === 0) {
                     annualScoreDisplay = '-';
                     finalScoreDisplay = '-';
@@ -773,7 +787,7 @@
                 const annual = (h1Score * 0.4) + (baseScore * 0.6);
                 annualDisplay = annual.toFixed(2);
                 const final = annual + numVal;
-                finalDisplay = final.toFixed(2);
+                finalDisplay = customRound(final);
             }
 
             const finalEl = document.getElementById(`final-${idx}`);
@@ -805,7 +819,7 @@
                 const bonusVal = bonusInput ? parseFloat(bonusInput.value || 0) : 0;
 
                 const finalVal = annualScore + bonusVal;
-                finalScoreDisplay = finalVal.toFixed(2);
+                finalScoreDisplay = customRound(finalVal);
             }
 
             const annualEl = document.getElementById(`annual-${idx}`);
