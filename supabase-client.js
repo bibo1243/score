@@ -134,6 +134,53 @@ async function restoreAllScoresInSupabase() {
     return { success: true, count: restoredCount };
 }
 
+// Save bonus to Supabase (using _SYSTEM_BONUS_ rater)
+async function saveBonusInSupabase(name, bonus) {
+    const rater = '_SYSTEM_BONUS_';
+    const ratee = name;
+    const bonusVal = parseInt(bonus, 10);
+
+    // Check if exists
+    const endpoint = `scores?ratee=eq.${encodeURIComponent(ratee)}&rater=eq.${encodeURIComponent(rater)}&select=id`;
+    const existing = await supabaseRequest(endpoint);
+
+    if (existing && existing.length > 0) {
+        // Update (PATCH)
+        const updateEndpoint = `scores?ratee=eq.${encodeURIComponent(ratee)}&rater=eq.${encodeURIComponent(rater)}`;
+        return await supabaseRequest(updateEndpoint, {
+            method: 'PATCH',
+            body: { cat1: bonusVal }
+        });
+    } else {
+        // Insert (POST)
+        return await supabaseRequest('scores', {
+            method: 'POST',
+            body: {
+                ratee: ratee,
+                rater: rater,
+                cat1: bonusVal,
+                cat2: 0,
+                cat3: 0
+            }
+        });
+    }
+}
+
+// Fetch bonuses from Supabase
+async function fetchBonusesFromSupabase() {
+    const rater = '_SYSTEM_BONUS_';
+    const endpoint = `scores?rater=eq.${encodeURIComponent(rater)}&select=ratee,cat1`;
+    const result = await supabaseRequest(endpoint);
+
+    const bonuses = {};
+    if (result) {
+        result.forEach(row => {
+            bonuses[row.ratee] = row.cat1 || 0;
+        });
+    }
+    return bonuses;
+}
+
 // Export backup as CSV
 async function exportBackupCSV() {
     const scores = await fetchScores();
