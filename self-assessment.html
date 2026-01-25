@@ -397,29 +397,14 @@
 
         async function loadBonuses() {
             try {
-                // 1. Try fetching from Supabase (Real-time source of truth)
-                if (typeof fetchBonusesFromSupabase === 'function') {
-                    const supabaseBonuses = await fetchBonusesFromSupabase();
-                    if (supabaseBonuses) {
-                        bonuses = { ...bonuses, ...supabaseBonuses };
-                        console.log("Loaded bonuses from Supabase");
-                    }
-                }
-
-                // 2. Try fetching from local server (as backup or for localhost)
                 const res = await fetch('/api/bonuses');
                 if (res.ok) {
-                    const localBonuses = await res.json();
-                    // Merge, prefer Supabase if available, but here we just merge
-                    // Actually, if Supabase loaded, we might trust it more.
-                    // Let's merge server bonuses in if missing from Supabase
-                    bonuses = { ...localBonuses, ...bonuses };
+                    bonuses = await res.json();
                 }
             } catch (e) {
-                console.log("Could not load bonuses:", e);
+                console.log("Could not load bonuses from server, using local storage");
             }
         }
-
 
         async function loadScoreData() {
             // Priority 1: Local server API (for localhost)
@@ -508,13 +493,22 @@
             const nameFilter = document.getElementById('nameFilter').value.trim();
             const container = document.getElementById('contentArea');
 
+            // Institution heads and managers to exclude - RESTORED FOR ALL
+            // const MANAGERS_TO_EXCLUDE = ['李冠葦', '廖振杉', '廖慧雯', '楊顗帆', '陳淑錡', '陳宛妤', '鍾宜珮', '高靜華', '白梅芳'];
+
             let filtered = assessmentData.filter(d => {
+                // Skip managers - REMOVED
+                // if (MANAGERS_TO_EXCLUDE.includes(d.name)) return false;
+
                 // Org filter
                 if (orgFilter !== 'all' && d.org !== orgFilter) return false;
+
                 // Unit filter
                 if (unitFilter !== 'all' && d.unit !== unitFilter) return false;
+
                 // Name filter (Search)
                 if (nameFilter && !d.name.includes(nameFilter)) return false;
+
                 return true;
             });
 
@@ -540,6 +534,7 @@
 
             filtered.forEach((emp, index) => {
                 // Insert Unit Header if changed
+                // Display separation header for better readability
                 const displayUnit = emp.unit || '其他';
                 const displayGroupKey = `${emp.org} - ${displayUnit}`;
 
@@ -563,14 +558,16 @@
                 }
 
                 // Get saved bonus
+                // Prioritize Server Bonus -> LocalStorage -> 0
                 const serverBonus = bonuses[emp.name];
                 const localBonus = localStorage.getItem(`assessment_bonus_${emp.name}`);
                 const bonusVal = (serverBonus !== undefined) ? serverBonus : (localBonus || 0);
 
                 // Get score data
                 const scores = scoreData[emp.name] || {};
-                const baseScore = parseFloat(scores.average_score || 0);
+                const baseScore = parseFloat(scores.average_score || 0); // Use average_score like index.html
 
+                // If baseScore is 0 (missing data), handle gracefully
                 let finalScoreDisplay = '-';
                 if (baseScore > 0) {
                     finalScoreDisplay = (baseScore + parseFloat(bonusVal)).toFixed(2);
@@ -604,12 +601,13 @@
                         }
                     });
 
-                    html += `</div>`;
+                    html += `</div>`; // End section-block
                 });
 
                 html += `</div> <!-- End assessment-content -->`;
 
-                // Right: Score Dashboard
+                // Right: Score Dashboard (Employee Card Style)
+                // Colors mimicking homepage badges
                 const orgColor = getOrgColor(emp.org);
                 const unitBadge = emp.unit ? `<span style="background:#eef2ff; color:#4f46e5; padding:2px 8px; border-radius:4px; font-size:12px; margin-right:5px;">${emp.unit}</span>` : '';
 
@@ -681,6 +679,7 @@
         function getDetailedBreakdown(scores) {
             if (!scores.average_score) return "尚無詳細評分資料";
             // Show Cat1, Cat2, Cat3, Total from Supabase data
+            // API returns: cat1_rounded, cat2_rounded, cat3_rounded, average_score
             const cat1 = scores.cat1_rounded !== undefined ? scores.cat1_rounded : '-';
             const cat2 = scores.cat2_rounded !== undefined ? scores.cat2_rounded : '-';
             const cat3 = scores.cat3_rounded !== undefined ? scores.cat3_rounded : '-';
@@ -710,58 +709,49 @@
                     <span style="font-size:11px; color:#94a3b8;"> / 100</span>
                 </div>
             `;
+        }
 
-            window.updateBonus = async function (name, idx, baseScore, val) {
-                let numVal = parseInt(val, 10);
-                if (isNaN(numVal)) numVal = 0;
+        window.updateBonus = async function (name, idx, baseScore, val) {
+            let numVal = parseInt(val, 10);
+            if (isNaN(numVal)) numVal = 0;
 
-                if (numVal > 3) { numVal = 3; document.getElementById(`bonus-${idx}`).value = 3; }
-                if (numVal < 0) { numVal = 0; document.getElementById(`bonus-${idx}`).value = 0; }
+            if (numVal > 3) { numVal = 3; document.getElementById(`bonus-${idx}`).value = 3; }
+            if (numVal < 0) { numVal = 0; document.getElementById(`bonus-${idx}`).value = 0; }
 
-                // 1. Save to Local Storage (Immediate local cache)
-                localStorage.setItem(`assessment_bonus_${name}`, numVal);
+            // 1. Save to Local Storage
+            localStorage.setItem(`assessment_bonus_${name}`, numVal);
 
-                // 2. Save to Supabase (Real-time sync)
-                try {
-                    if (typeof saveBonusInSupabase === 'function') {
-                        await saveBonusInSupabase(name, numVal);
-                        console.log("Saved bonus to Supabase");
-                    }
-                } catch (e) {
-                    console.error("Failed to save bonus to Supabase", e);
-                }
+            // 2. Save to Server
+            try {
+                await fetch('/api/save_bonus', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name, bonus: numVal })
+                });
+            } catch (e) { console.error("Failed to save bonus to server", e); }
 
-                // 3. Save to Local Server (for backup/localhost)
-                try {
-                    await fetch('/api/save_bonus', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name: name, bonus: numVal })
-                    });
-                } catch (e) { console.error("Failed to save bonus to server", e); }
-
-                // 4. Update UI
-                if (baseScore > 0) {
-                    const final = (baseScore + numVal).toFixed(2);
-                    document.getElementById(`final-${idx}`).innerText = final;
-                }
+            // 3. Update UI
+            if (baseScore > 0) {
+                const final = (baseScore + numVal).toFixed(2);
+                document.getElementById(`final-${idx}`).innerText = final;
             }
+        }
 
-            function escapeHtml(text) {
-                if (!text) return '';
-                return text
-                    .replace(/&/g, "&amp;")
-                    .replace(/</g, "&lt;")
-                    .replace(/>/g, "&gt;")
-                    .replace(/"/g, "&quot;")
-                    .replace(/'/g, "&#039;");
-            }
+        function escapeHtml(text) {
+            if (!text) return '';
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
 
 
 
-            // Event listeners removed here as they are now in setupFilters() inside init()
+        // Event listeners removed here as they are now in setupFilters() inside init()
 
-            init();
+        init();
     </script>
 </body>
 
