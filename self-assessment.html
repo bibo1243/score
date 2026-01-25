@@ -616,7 +616,10 @@
                     // Formula: ((H2 + Bonus) * 0.6) + (H1 * 0.4)
                     const h2Total = baseScore + parseFloat(bonusVal);
                     const finalVal = (h2Total * 0.6) + (h1Score * 0.4);
-                    finalScoreDisplay = finalVal.toFixed(2);
+
+                    // Apply special rounding rule
+                    const result = calculateFinalRound(finalVal);
+                    finalScoreDisplay = `${result.rounded} <span style="font-size:0.6em; color:#94a3b8; font-weight:normal;">(${result.original})</span>`;
                 } else if (baseScore === 0) {
                     finalScoreDisplay = '-';
                 }
@@ -749,6 +752,24 @@
             `;
         }
 
+        function calculateFinalRound(score) {
+            // Rule: 
+            // 85.09 -> 85 (Decimal < 0.1)
+            // 85.10 -> 86 (Decimal >= 0.1)
+            let fixed = parseFloat(score.toFixed(2));
+            let floorVal = Math.floor(fixed);
+            let decimal = fixed - floorVal;
+
+            // Using small epsilon for float comparison safety, though toFixed(2) handles most.
+            // Check if decimal part is >= 0.10
+            let rounded = (decimal >= 0.099999) ? (floorVal + 1) : floorVal;
+
+            return {
+                rounded: rounded,
+                original: fixed.toFixed(2)
+            };
+        }
+
         window.updateBonus = async function (name, idx, baseScore, val) {
             let numVal = parseInt(val, 10);
             if (isNaN(numVal)) numVal = 0;
@@ -777,11 +798,13 @@
                 // Formula: (H2 + Bonus) * 0.6 + H1 * 0.4
                 const h2Total = baseScore + numVal;
                 const final = (h2Total * 0.6) + (h1Score * 0.4);
-                finalDisplay = final.toFixed(2);
+
+                const result = calculateFinalRound(final);
+                finalDisplay = `${result.rounded} <span style="font-size:0.6em; color:#94a3b8; font-weight:normal;">(${result.original})</span>`;
             }
 
             const finalEl = document.getElementById(`final-${idx}`);
-            if (finalEl) finalEl.innerText = finalDisplay;
+            if (finalEl) finalEl.innerHTML = finalDisplay;
         }
 
         window.updateH1Score = async function (name, idx, val) {
@@ -804,11 +827,13 @@
                 // Formula: (H2 + Bonus) * 0.6 + H1 * 0.4
                 const h2Total = baseScore + bonusVal;
                 const finalVal = (h2Total * 0.6) + (numVal * 0.4);
-                finalScoreDisplay = finalVal.toFixed(2);
+
+                const result = calculateFinalRound(finalVal);
+                finalScoreDisplay = `${result.rounded} <span style="font-size:0.6em; color:#94a3b8; font-weight:normal;">(${result.original})</span>`;
             }
 
             const finalEl = document.getElementById(`final-${idx}`);
-            if (finalEl) finalEl.innerText = finalScoreDisplay;
+            if (finalEl) finalEl.innerHTML = finalScoreDisplay;
 
             try {
                 await saveSystemScoreToSupabase(name, numVal, '_SYSTEM_H1_');
