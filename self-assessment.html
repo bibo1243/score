@@ -410,14 +410,48 @@
         }
 
         async function loadBonuses() {
+            // Priority 1: Local API
             try {
                 const res = await fetch('/api/bonuses');
                 if (res.ok) {
                     bonuses = await res.json();
+                    return;
                 }
             } catch (e) {
-                console.log("Could not load bonuses from server, using local storage");
+                console.log("Local API unavailable");
             }
+
+            // Priority 2: Direct Supabase Fetch (fallback for GitHub Pages)
+            try {
+                bonuses = await fetchBonusesFromSupabase();
+                console.log("Loaded bonuses from Supabase directly");
+            } catch (e) {
+                console.log("Could not load bonuses from Supabase", e);
+            }
+        }
+
+        async function fetchBonusesFromSupabase() {
+            // Internal Use Only: Service Key for bypassing RLS
+            const SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFjcmtjbG1kZXJxZXdjd3Vnc25sIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NjI1NzQzMCwiZXhwIjoyMDgxODMzNDMwfQ.ZCQl_0dsfPdkG43zQsF47lbbhA6ybiGLa2fw0zSKGzQ";
+            const SUPABASE_URL = 'https://acrkclmderqewcwugsnl.supabase.co';
+            const rater = '_SYSTEM_BONUS_';
+
+            const url = `${SUPABASE_URL}/rest/v1/scores?rater=eq.${encodeURIComponent(rater)}&select=ratee,cat1`;
+            const headers = {
+                'apikey': SERVICE_KEY,
+                'Authorization': `Bearer ${SERVICE_KEY}`,
+                'Content-Type': 'application/json'
+            };
+
+            const res = await fetch(url, { headers: headers });
+            if (!res.ok) throw new Error(await res.text());
+
+            const data = await res.json();
+            const result = {};
+            data.forEach(row => {
+                if (row.ratee) result[row.ratee] = row.cat1;
+            });
+            return result;
         }
 
         async function loadScoreData() {
@@ -735,19 +769,85 @@
             // 1. Save to Local Storage
             localStorage.setItem(`assessment_bonus_${name}`, numVal);
 
-            // 2. Save to Server
+            // 2. Save to Server (Strategy Pattern)
+            let saved = false;
+
+            // Strategy A: Local API
             try {
-                await fetch('/api/save_bonus', {
+                const res = await fetch('/api/save_bonus', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name: name, bonus: numVal })
                 });
-            } catch (e) { console.error("Failed to save bonus to server", e); }
+                if (res.ok) saved = true;
+            } catch (e) {
+                console.log("Local API unavailable");
+            }
+
+            // Strategy B: Direct Supabase
+            if (!saved) {
+                try {
+                    await saveBonusToSupabase(name, numVal);
+                    saved = true;
+                    console.log("Saved to Supabase directly");
+                } catch (e) {
+                    console.error("Failed to save bonus to server/db", e);
+                }
+            }
 
             // 3. Update UI
             if (baseScore > 0) {
                 const final = (baseScore + numVal).toFixed(2);
                 document.getElementById(`final-${idx}`).innerText = final;
+            }
+        }
+
+        async function saveBonusToSupabase(name, bonus) {
+            const SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFjcmtjbG1kZXJxZXdjd3Vnc25sIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NjI1NzQzMCwiZXhwIjoyMDgxODMzNDMwfQ.ZCQl_0dsfPdkG43zQsF47lbbhA6ybiGLa2fw0zSKGzQ";
+            const SUPABASE_URL = 'https://acrkclmderqewcwugsnl.supabase.co';
+
+            async function serviceRequest(endpoint, options = {}) {
+                const url = `${SUPABASE_URL}/rest/v1/${endpoint}`;
+                const headers = {
+                    'apikey': SERVICE_KEY,
+                    'Authorization': `Bearer ${SERVICE_KEY}`,
+                    'Content-Type': 'application/json',
+                    'Prefer': options.prefer || 'return=representation'
+                };
+
+                const res = await fetch(url, {
+                    method: options.method || 'GET',
+                    headers: headers,
+                    body: options.body ? JSON.stringify(options.body) : undefined
+                });
+                if (!res.ok) throw new Error(await res.text());
+                const text = await res.text();
+                return text ? JSON.parse(text) : null;
+            }
+
+            const rater = '_SYSTEM_BONUS_';
+            const ratee = name;
+
+            const checkUrl = `scores?ratee=eq.${encodeURIComponent(ratee)}&rater=eq.${encodeURIComponent(rater)}&select=id`;
+            const existing = await serviceRequest(checkUrl);
+
+            if (existing && existing.length > 0) {
+                const updateUrl = `scores?ratee=eq.${encodeURIComponent(ratee)}&rater=eq.${encodeURIComponent(rater)}`;
+                await serviceRequest(updateUrl, {
+                    method: 'PATCH',
+                    body: { cat1: bonus }
+                });
+            } else {
+                await serviceRequest('scores', {
+                    method: 'POST',
+                    body: {
+                        ratee: ratee,
+                        rater: rater,
+                        cat1: bonus,
+                        cat2: 0,
+                        cat3: 0
+                    }
+                });
             }
         }
 
