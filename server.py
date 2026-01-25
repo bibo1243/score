@@ -1330,14 +1330,20 @@ class ScoreHandler(SimpleHTTPRequestHandler):
             "high_threshold": HIGH_SCORE_THRESHOLD
         }
 
-def run_server():
-    print(f"🚀 Starting Real-time Score Server at http://localhost:{PORT}")
+def run_server(port=PORT):
+    print(f"🚀 Starting Real-time Score Server at http://localhost:{port}")
     print(f"📂 Serving files from: {BASE_DIR}")
-    print(f"🔄 Data endpoint: http://localhost:{PORT}/api/data")
+    print(f"🔄 Data endpoint: http://localhost:{port}/api/data")
     print("💡 Press Ctrl+C to stop the server.")
     
-    server = HTTPServer(('', PORT), ScoreHandler)
+    server = HTTPServer(('', port), ScoreHandler)
     server.serve_forever()
 
 if __name__ == '__main__':
-    run_server()
+    import sys
+    if len(sys.argv) > 1:
+        try:
+            PORT = int(sys.argv[1])
+        except ValueError:
+            print(f"Invalid port: {sys.argv[1]}, using default {PORT}")
+    run_server(PORT)
