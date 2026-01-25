@@ -289,6 +289,7 @@
         let assessmentData = [];
         let scoreData = {};
         let bonuses = {};
+        let h1Scores = {};
         let staffDir = {};
 
         const SECTIONS = [
@@ -401,8 +402,6 @@
             assessmentData.filter(d => {
                 const matchOrg = orgVal === 'all' || d.org === orgVal;
                 const matchUnit = unitVal === 'all' || d.unit === unitVal;
-                // Exclude managers from list - RESTORED FOR ALL
-                // const MANAGERS_TO_EXCLUDE = ['李冠葦', '廖振杉', '廖慧雯', '楊顗帆', '陳淑錡', '陳宛妤', '鍾宜珮', '高靜華', '白梅芳'];
                 return matchOrg && matchUnit;
             }).forEach(d => {
                 nameList.innerHTML += `<option value="${d.name}">`;
@@ -410,33 +409,36 @@
         }
 
         async function loadBonuses() {
-            // Priority 1: Local API
+            // Priority 1: Local API (Legacy check)
             try {
                 const res = await fetch('/api/bonuses');
                 if (res.ok) {
                     bonuses = await res.json();
-                    return;
                 }
             } catch (e) {
-                console.log("Local API unavailable");
+                // console.log("Local API unavailable");
             }
 
-            // Priority 2: Direct Supabase Fetch (fallback for GitHub Pages)
+            // Priority 2: Direct Supabase Fetch (Primary for System Scores)
             try {
-                bonuses = await fetchBonusesFromSupabase();
-                console.log("Loaded bonuses from Supabase directly");
+                const sysData = await fetchSystemScoresFromSupabase();
+                // Merge with any local data, but prioritize Supabase for full system data
+                if (sysData.bonuses) bonuses = { ...bonuses, ...sysData.bonuses };
+                if (sysData.h1Scores) h1Scores = sysData.h1Scores;
+
+                console.log("Loaded system scores (Bonus + H1) directly", sysData);
             } catch (e) {
-                console.log("Could not load bonuses from Supabase", e);
+                console.log("Could not load system scores from Supabase", e);
             }
         }
 
-        async function fetchBonusesFromSupabase() {
+        async function fetchSystemScoresFromSupabase() {
             // Internal Use Only: Service Key for bypassing RLS
             const SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFjcmtjbG1kZXJxZXdjd3Vnc25sIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NjI1NzQzMCwiZXhwIjoyMDgxODMzNDMwfQ.ZCQl_0dsfPdkG43zQsF47lbbhA6ybiGLa2fw0zSKGzQ";
             const SUPABASE_URL = 'https://acrkclmderqewcwugsnl.supabase.co';
-            const rater = '_SYSTEM_BONUS_';
 
-            const url = `${SUPABASE_URL}/rest/v1/scores?rater=eq.${encodeURIComponent(rater)}&select=ratee,cat1`;
+            // Fetch both BONUS and H1 scores
+            const url = `${SUPABASE_URL}/rest/v1/scores?rater=in.(_SYSTEM_BONUS_,_SYSTEM_H1_)&select=ratee,rater,cat1`;
             const headers = {
                 'apikey': SERVICE_KEY,
                 'Authorization': `Bearer ${SERVICE_KEY}`,
@@ -447,9 +449,12 @@
             if (!res.ok) throw new Error(await res.text());
 
             const data = await res.json();
-            const result = {};
+            const result = { bonuses: {}, h1Scores: {} };
+
             data.forEach(row => {
-                if (row.ratee) result[row.ratee] = row.cat1;
+                const val = parseFloat(row.cat1) || 0;
+                if (row.rater === '_SYSTEM_BONUS_') result.bonuses[row.ratee] = val;
+                if (row.rater === '_SYSTEM_H1_') result.h1Scores[row.ratee] = val;
             });
             return result;
         }
@@ -467,7 +472,7 @@
                     return;
                 }
             } catch (e) {
-                console.log("Local API unavailable, trying Supabase");
+                // console.log("Local API unavailable, trying Supabase");
             }
 
             // Priority 2: Real-time Supabase data (for GitHub Pages)
@@ -541,22 +546,10 @@
             const nameFilter = document.getElementById('nameFilter').value.trim();
             const container = document.getElementById('contentArea');
 
-            // Institution heads and managers to exclude - RESTORED FOR ALL
-            // const MANAGERS_TO_EXCLUDE = ['李冠葦', '廖振杉', '廖慧雯', '楊顗帆', '陳淑錡', '陳宛妤', '鍾宜珮', '高靜華', '白梅芳'];
-
             let filtered = assessmentData.filter(d => {
-                // Skip managers - REMOVED
-                // if (MANAGERS_TO_EXCLUDE.includes(d.name)) return false;
-
-                // Org filter
                 if (orgFilter !== 'all' && d.org !== orgFilter) return false;
-
-                // Unit filter
                 if (unitFilter !== 'all' && d.unit !== unitFilter) return false;
-
-                // Name filter (Search)
                 if (nameFilter && !d.name.includes(nameFilter)) return false;
-
                 return true;
             });
 
@@ -565,11 +558,9 @@
                 return;
             }
 
-            // Sort data: Org -> Unit -> Name
             filtered.sort((a, b) => {
                 if (a.org !== b.org) return a.org.localeCompare(b.org);
                 if (a.unit !== b.unit) {
-                    // Put empty unit at end
                     if (!a.unit) return 1;
                     if (!b.unit) return -1;
                     return a.unit.localeCompare(b.unit);
@@ -581,45 +572,47 @@
             let currentUnitGroup = null;
 
             filtered.forEach((emp, index) => {
-                // Insert Unit Header if changed
-                // Display separation header for better readability
                 const displayUnit = emp.unit || '其他';
                 const displayGroupKey = `${emp.org} - ${displayUnit}`;
 
                 if (displayGroupKey !== currentUnitGroup) {
                     currentUnitGroup = displayGroupKey;
-                    html += `<div class="group-header" style="
-                        margin: 30px 0 15px 0; 
-                        padding: 8px 15px; 
-                        background: #e0e7ff; 
-                        color: #3730a3; 
-                        border-radius: 6px; 
-                        font-weight: bold; 
-                        font-size: 1.1em;
-                        border-left: 5px solid #4f46e5;
-                        display: flex;
-                        justify-content: space-between;
-                        align-items: center;
-                    ">
+                    html += `<div class="group-header" style="margin: 30px 0 15px 0; padding: 8px 15px; background: #e0e7ff; color: #3730a3; border-radius: 6px; font-weight: bold; font-size: 1.1em; border-left: 5px solid #4f46e5; display: flex; justify-content: space-between; align-items: center;">
                         <span>${emp.org} <i class="fa-solid fa-chevron-right" style="font-size:0.8em; margin:0 5px;"></i> ${displayUnit}</span>
                     </div>`;
                 }
 
-                // Get saved bonus
-                // Prioritize Server Bonus -> LocalStorage -> 0
+                // Data Retrieval
                 const serverBonus = bonuses[emp.name];
                 const localBonus = localStorage.getItem(`assessment_bonus_${emp.name}`);
                 const bonusVal = (serverBonus !== undefined) ? serverBonus : (localBonus || 0);
 
-                // Get score data
                 const scores = scoreData[emp.name] || {};
-                const baseScore = parseFloat(scores.average_score || 0); // Use average_score like index.html
+                const baseScore = parseFloat(scores.average_score || 0); // H2 Score
 
-                // If baseScore is 0 (missing data), handle gracefully
-                let finalScoreDisplay = '-';
-                if (baseScore > 0) {
-                    finalScoreDisplay = (baseScore + parseFloat(bonusVal)).toFixed(2);
+                // H1 Score Logic
+                const h1Val = h1Scores[emp.name];
+                const hasH1 = (h1Val !== undefined && h1Val !== null && h1Val !== '');
+                const h1Score = hasH1 ? parseFloat(h1Val) : 0;
+
+                // Annual Calculation
+                let annualScoreDisplay = '尚缺「上半年之總分」';
+                let finalScoreDisplay = '尚缺「上半年之總分」';
+                let annualScore = 0;
+
+                if (hasH1 && baseScore > 0) {
+                    annualScore = (h1Score * 0.4) + (baseScore * 0.6);
+                    annualScoreDisplay = annualScore.toFixed(2);
+
+                    const finalVal = annualScore + parseFloat(bonusVal);
+                    finalScoreDisplay = finalVal.toFixed(2);
+                } else if (baseScore === 0) {
+                    annualScoreDisplay = '-';
+                    finalScoreDisplay = '-';
                 }
+
+                const orgColor = getOrgColor(emp.org);
+                const unitBadge = emp.unit ? `<span style="background:#eef2ff; color:#4f46e5; padding:2px 8px; border-radius:4px; font-size:12px; margin-right:5px;">${emp.unit}</span>` : '';
 
                 html += `
                 <div class="employee-assessment-card">
@@ -628,71 +621,54 @@
                         <div class="employee-org">${emp.org}</div>
                     </div>
                     <div class="card-body">
-                        <!-- Left: Assessment Content -->
                         <div class="assessment-content">
                 `;
 
                 SECTIONS.forEach(sec => {
-                    html += `<div class="section-block">
-                        <div class="section-title">${sec.title}</div>`;
-
+                    html += `<div class="section-block"><div class="section-title">${sec.title}</div>`;
                     sec.items.forEach(item => {
                         const ans = emp.answers[item.colIndex];
-                        if (ans) {
-                            html += `
-                            <div class="qa-item">
-                                <div class="question">${item.q}</div>
-                                <div class="answer">${escapeHtml(ans)}</div>
-                            </div>`;
-                        } else {
-                            html += `<div class="qa-item"><div class="question">${item.q}</div><div class="answer" style="color:#ccc;">(未填寫)</div></div>`;
-                        }
+                        html += ans ? `<div class="qa-item"><div class="question">${item.q}</div><div class="answer">${escapeHtml(ans)}</div></div>` : `<div class="qa-item"><div class="question">${item.q}</div><div class="answer" style="color:#ccc;">(未填寫)</div></div>`;
                     });
-
-                    html += `</div>`; // End section-block
+                    html += `</div>`;
                 });
 
-                html += `</div> <!-- End assessment-content -->`;
-
-                // Right: Score Dashboard (Employee Card Style)
-                // Colors mimicking homepage badges
-                const orgColor = getOrgColor(emp.org);
-                const unitBadge = emp.unit ? `<span style="background:#eef2ff; color:#4f46e5; padding:2px 8px; border-radius:4px; font-size:12px; margin-right:5px;">${emp.unit}</span>` : '';
-
-                html += `
+                html += `</div> <!-- End assessment-content -->
                         <div class="score-sidebar">
+                            
                             <a href="index.html?search=${encodeURIComponent(emp.name)}" target="_blank" style="text-decoration:none; color:inherit; display:block;">
-                            <div class="score-card" style="border:1px solid #eee; border-radius:12px; padding:20px; transition: transform 0.2s;">
+                            <div class="score-card" style="border:1px solid #eee; border-radius:12px; padding:20px; transition: transform 0.2s; margin-bottom: 20px;">
                                 <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:15px;">
                                     <div>
-                                        <h3 style="margin:0; font-size:22px; color:#1e293b;">${emp.name}</h3>
+                                        <h3 style="margin:0; font-size:18px; color:#1e293b;">下半年考核總分 (60%)</h3>
                                         <div style="margin-top:8px;">
                                             <span style="background:${orgColor.bg}; color:${orgColor.text}; padding:4px 10px; border-radius:6px; font-size:13px; font-weight:500;">${emp.org}</span>
                                             ${unitBadge}
                                         </div>
                                     </div>
-                                    <div style="width:60px; height:60px; background:linear-gradient(135deg, #4f46e5, #818cf8); border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-size:20px; font-weight:bold; box-shadow:0 4px 6px -1px rgba(79, 70, 229, 0.3);">
+                                    <div style="width:50px; height:50px; background:#f1f5f9; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#475569; font-size:16px; font-weight:bold;">
                                         ${baseScore > 0 ? baseScore.toFixed(0) : '-'}
                                     </div>
                                 </div>
-                                
-                                <div style="background:#f8fafc; border-radius:8px; padding:12px; font-size:13px; color:#64748b; line-height:1.6; margin-bottom:15px;">
-                                    ${getDetailedBreakdown(scores)}
-                                </div>
-
-                                <div style="display:flex; justify-content:space-between; align-items:center;">
-                                    <div style="display:flex; gap:15px; font-size:14px; font-weight:500; color:#475569;">
-                                        <span><i class="fa-solid fa-users" style="color:#cbd5e1; margin-right:4px;"></i> ${scores.rater_count || 0} 人評分</span>
-                                    </div>
-                                    <div style="font-size:12px; color:#94a3b8;">
-                                        點擊查看詳情 <i class="fa-solid fa-arrow-right"></i>
-                                    </div>
-                                </div>
+                                <div style="background:#f8fafc; border-radius:8px; padding:12px; font-size:13px; color:#64748b;">${getDetailedBreakdown(scores)}</div>
                             </div>
                             </a>
 
-                            <!-- Edit Bonus Section -->
-                            <div class="bonus-section" style="margin-top:20px;">
+                            <!-- H1 Score Input Section -->
+                            <div class="bonus-section" style="background: #fff7ed; border-color: #ffedd5; margin-bottom: 20px;">
+                                <div class="bonus-input-group">
+                                    <span class="bonus-label" style="color: #9a3412;">上半年總分 (40%)</span>
+                                    <input type="number" class="bonus-input" id="h1-${index}" 
+                                        min="0" max="100" step="0.01"
+                                        value="${hasH1 ? h1Val : ''}" 
+                                        placeholder="輸入分數"
+                                        onchange="updateH1Score('${emp.name}', ${index}, this.value)">
+                                </div>
+                                <div class="raters-list" style="color: #c2410c;">請輸入上半年總分（若無請留空）。</div>
+                            </div>
+                            
+                            <!-- Bonus Section -->
+                            <div class="bonus-section">
                                 <div class="bonus-input-group">
                                     <span class="bonus-label">加分 (Max 3)</span>
                                     <input type="number" class="bonus-input" id="bonus-${index}" 
@@ -700,18 +676,26 @@
                                         value="${bonusVal}" 
                                         onchange="updateBonus('${emp.name}', ${index}, ${baseScore}, this.value)">
                                 </div>
-                                <div class="raters-list">請根據左側自我考核內容，給予適當加分（限整數）。</div>
                                 
-                                <div class="final-score-row">
-                                    <span class="final-score-label">最終總分</span>
-                                    <span class="final-score-value" id="final-${index}">${finalScoreDisplay}</span>
+                                <div style="margin-top: 15px; border-top: 1px dashed #eee; padding-top: 10px;">
+                                    <div class="final-score-row" style="margin-bottom: 5px;">
+                                        <span class="final-score-label" style="font-size: 14px; color: #64748b;">全年度總分</span>
+                                        <span class="final-score-value" style="font-size: 16px; color: #475569;" id="annual-${index}">${annualScoreDisplay}</span>
+                                    </div>
+                                    <div class="final-score-row">
+                                        <span class="final-score-label">最終總分</span>
+                                        <span class="final-score-value" id="final-${index}">${finalScoreDisplay}</span>
+                                    </div>
+                                    <div style="font-size: 11px; color: #94a3b8; margin-top: 5px; text-align: right;">
+                                        (上半年×40% + 下半年×60%) + 加分
+                                    </div>
                                 </div>
                             </div>
+
                         </div> <!-- End score-sidebar -->
                     </div> <!-- End card-body -->
                 </div>`;
             });
-
             container.innerHTML = html;
         }
 
@@ -769,84 +753,108 @@
             // 1. Save to Local Storage
             localStorage.setItem(`assessment_bonus_${name}`, numVal);
 
-            // 2. Save to Server (Strategy Pattern)
-            let saved = false;
-
-            // Strategy A: Local API
+            // 2. Save directly to Supabase
             try {
-                const res = await fetch('/api/save_bonus', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: name, bonus: numVal })
-                });
-                if (res.ok) saved = true;
+                await saveSystemScoreToSupabase(name, numVal, '_SYSTEM_BONUS_');
             } catch (e) {
-                console.log("Local API unavailable");
-            }
-
-            // Strategy B: Direct Supabase
-            if (!saved) {
-                try {
-                    await saveBonusToSupabase(name, numVal);
-                    saved = true;
-                    console.log("Saved to Supabase directly");
-                } catch (e) {
-                    console.error("Failed to save bonus to server/db", e);
-                }
+                console.error("Failed to save bonus to server/db", e);
             }
 
             // 3. Update UI
-            if (baseScore > 0) {
-                const final = (baseScore + numVal).toFixed(2);
-                document.getElementById(`final-${idx}`).innerText = final;
+            // Need to know H1 score to update final accurately
+            const h1Val = h1Scores[name];
+            const h1Score = (h1Val !== undefined && h1Val !== null) ? parseFloat(h1Val) : 0;
+            const hasH1 = (h1Val !== undefined && h1Val !== null);
+
+            let finalDisplay = '尚缺「上半年之總分」';
+            let annualDisplay = '尚缺「上半年之總分」';
+
+            if (hasH1 && baseScore > 0) {
+                const annual = (h1Score * 0.4) + (baseScore * 0.6);
+                annualDisplay = annual.toFixed(2);
+                const final = annual + numVal;
+                finalDisplay = final.toFixed(2);
+            }
+
+            const finalEl = document.getElementById(`final-${idx}`);
+            if (finalEl) finalEl.innerText = finalDisplay;
+            // Also need to update Annual in case logic is shared? Annual is not affected by bonus.
+        }
+
+        window.updateH1Score = async function (name, idx, val) {
+            let numVal = parseFloat(val); // Float allowed for H1
+            if (isNaN(numVal) || numVal < 0) numVal = 0;
+            if (numVal > 100) numVal = 100;
+
+            h1Scores[name] = numVal;
+
+            // Recalculate
+            const scores = scoreData[name] || {};
+            const baseScore = parseFloat(scores.average_score || 0);
+
+            let annualScoreDisplay = '尚缺「上半年之總分」';
+            let finalScoreDisplay = '尚缺「上半年之總分」';
+
+            if (baseScore > 0) { // Assuming if we are inputting H1, H1 is 'present'
+                // But if input is cleared (val === ''), we should handle that.
+                // For now, assume inputting number implies presence.
+                const annualScore = (numVal * 0.4) + (baseScore * 0.6);
+                annualScoreDisplay = annualScore.toFixed(2);
+
+                const bonusInput = document.getElementById(`bonus-${idx}`);
+                const bonusVal = bonusInput ? parseFloat(bonusInput.value || 0) : 0;
+
+                const finalVal = annualScore + bonusVal;
+                finalScoreDisplay = finalVal.toFixed(2);
+            }
+
+            const annualEl = document.getElementById(`annual-${idx}`);
+            if (annualEl) annualEl.innerText = annualScoreDisplay;
+
+            const finalEl = document.getElementById(`final-${idx}`);
+            if (finalEl) finalEl.innerText = finalScoreDisplay;
+
+            try {
+                // Save H1
+                await saveSystemScoreToSupabase(name, numVal, '_SYSTEM_H1_');
+            } catch (e) {
+                console.error("Save H1 Failed", e);
             }
         }
 
-        async function saveBonusToSupabase(name, bonus) {
+        async function saveSystemScoreToSupabase(name, score, raterId) {
             const SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFjcmtjbG1kZXJxZXdjd3Vnc25sIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NjI1NzQzMCwiZXhwIjoyMDgxODMzNDMwfQ.ZCQl_0dsfPdkG43zQsF47lbbhA6ybiGLa2fw0zSKGzQ";
             const SUPABASE_URL = 'https://acrkclmderqewcwugsnl.supabase.co';
 
-            async function serviceRequest(endpoint, options = {}) {
-                const url = `${SUPABASE_URL}/rest/v1/${endpoint}`;
-                const headers = {
-                    'apikey': SERVICE_KEY,
-                    'Authorization': `Bearer ${SERVICE_KEY}`,
-                    'Content-Type': 'application/json',
-                    'Prefer': options.prefer || 'return=representation'
-                };
+            const url = `${SUPABASE_URL}/rest/v1/scores?ratee=eq.${encodeURIComponent(name)}&rater=eq.${encodeURIComponent(raterId)}`;
+            const headers = {
+                'apikey': SERVICE_KEY,
+                'Authorization': `Bearer ${SERVICE_KEY}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=representation'
+            };
 
-                const res = await fetch(url, {
-                    method: options.method || 'GET',
-                    headers: headers,
-                    body: options.body ? JSON.stringify(options.body) : undefined
-                });
-                if (!res.ok) throw new Error(await res.text());
-                const text = await res.text();
-                return text ? JSON.parse(text) : null;
-            }
-
-            const rater = '_SYSTEM_BONUS_';
-            const ratee = name;
-
-            const checkUrl = `scores?ratee=eq.${encodeURIComponent(ratee)}&rater=eq.${encodeURIComponent(rater)}&select=id`;
-            const existing = await serviceRequest(checkUrl);
+            // Check existence first
+            const checkRes = await fetch(`${url}&select=id`, { headers: headers });
+            const existing = await checkRes.json();
 
             if (existing && existing.length > 0) {
-                const updateUrl = `scores?ratee=eq.${encodeURIComponent(ratee)}&rater=eq.${encodeURIComponent(rater)}`;
-                await serviceRequest(updateUrl, {
+                await fetch(url, {
                     method: 'PATCH',
-                    body: { cat1: bonus }
+                    headers: headers,
+                    body: JSON.stringify({ cat1: score })
                 });
             } else {
-                await serviceRequest('scores', {
+                await fetch(`${SUPABASE_URL}/rest/v1/scores`, {
                     method: 'POST',
-                    body: {
-                        ratee: ratee,
-                        rater: rater,
-                        cat1: bonus,
+                    headers: headers,
+                    body: JSON.stringify({
+                        ratee: name,
+                        rater: raterId,
+                        cat1: score,
                         cat2: 0,
                         cat3: 0
-                    }
+                    })
                 });
             }
         }
@@ -860,10 +868,6 @@
                 .replace(/"/g, "&quot;")
                 .replace(/'/g, "&#039;");
         }
-
-
-
-        // Event listeners removed here as they are now in setupFilters() inside init()
 
         init();
     </script>
