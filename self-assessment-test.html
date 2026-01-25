@@ -410,14 +410,48 @@
         }
 
         async function loadBonuses() {
+            // Priority 1: Local API
             try {
                 const res = await fetch('/api/bonuses');
                 if (res.ok) {
                     bonuses = await res.json();
+                    return;
                 }
             } catch (e) {
-                console.log("Could not load bonuses from server, using local storage");
+                console.log("Local API unavailable");
             }
+
+            // Priority 2: Direct Supabase Fetch (for GitHub Pages)
+            try {
+                bonuses = await fetchBonusesFromSupabase();
+                console.log("Loaded bonuses from Supabase directly", bonuses);
+            } catch (e) {
+                console.error("Failed to load bonuses from Supabase", e);
+            }
+        }
+
+        async function fetchBonusesFromSupabase() {
+            // WARNING: Exposing Service Key in frontend is NOT secure. Internal use only.
+            const SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFjcmtjbG1kZXJxZXdjd3Vnc25sIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NjI1NzQzMCwiZXhwIjoyMDgxODMzNDMwfQ.ZCQl_0dsfPdkG43zQsF47lbbhA6ybiGLa2fw0zSKGzQ";
+            const SUPABASE_URL = 'https://acrkclmderqewcwugsnl.supabase.co';
+            const rater = '_SYSTEM_BONUS_';
+
+            const url = `${SUPABASE_URL}/rest/v1/scores?rater=eq.${encodeURIComponent(rater)}&select=ratee,cat1`;
+            const headers = {
+                'apikey': SERVICE_KEY,
+                'Authorization': `Bearer ${SERVICE_KEY}`,
+                'Content-Type': 'application/json'
+            };
+
+            const res = await fetch(url, { headers: headers });
+            if (!res.ok) throw new Error(await res.text());
+
+            const data = await res.json();
+            const result = {};
+            data.forEach(row => {
+                if (row.ratee) result[row.ratee] = row.cat1;
+            });
+            return result;
         }
 
         async function loadScoreData() {
