@@ -419,58 +419,349 @@
                 console.log("Could not load bonuses:", e);
             }
         }
-        // ... (omitted lines) ...
-        window.updateBonus = async function (name, idx, baseScore, val) {
-            let numVal = parseInt(val, 10);
-            if (isNaN(numVal)) numVal = 0;
 
-            if (numVal > 3) { numVal = 3; document.getElementById(`bonus-${idx}`).value = 3; }
-            if (numVal < 0) { numVal = 0; document.getElementById(`bonus-${idx}`).value = 0; }
 
-            // 1. Save to Local Storage (Immediate local cache)
-            localStorage.setItem(`assessment_bonus_${name}`, numVal);
-
-            // 2. Save to Supabase (Real-time sync)
+        async function loadScoreData() {
+            // Priority 1: Local server API (for localhost)
             try {
-                if (typeof saveBonusInSupabase === 'function') {
-                    await saveBonusInSupabase(name, numVal);
-                    console.log("Saved bonus to Supabase");
+                const response = await fetch('/api/data');
+                if (response.ok) {
+                    const data = await response.json();
+                    data.forEach(emp => {
+                        scoreData[emp.name] = emp;
+                    });
+                    console.log("Loaded from local API");
+                    return;
                 }
             } catch (e) {
-                console.error("Failed to save bonus to Supabase", e);
+                console.log("Local API unavailable, trying Supabase");
             }
 
-            // 3. Save to Local Server (for backup/localhost)
+            // Priority 2: Real-time Supabase data (for GitHub Pages)
             try {
-                await fetch('/api/save_bonus', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: name, bonus: numVal })
-                });
-            } catch (e) { console.error("Failed to save bonus to server", e); }
+                if (typeof loadProcessedData === 'function') {
+                    const data = await loadProcessedData();
+                    data.forEach(emp => {
+                        scoreData[emp.name] = emp;
+                    });
+                    console.log("Loaded real-time data from Supabase");
+                    return;
+                }
+            } catch (e) {
+                console.log("Supabase load failed, trying static data", e);
+            }
 
-            // 4. Update UI
-            if (baseScore > 0) {
-                const final = (baseScore + numVal).toFixed(2);
-                document.getElementById(`final-${idx}`).innerText = final;
+            // Priority 3: Static fallback (processed_data.json)
+            try {
+                const res = await fetch('processed_data.json');
+                if (res.ok) {
+                    const data = await res.json();
+                    data.forEach(emp => {
+                        scoreData[emp.name] = emp;
+                    });
+                    console.log("Loaded static processed data");
+                }
+            } catch (e) {
+                console.error("Failed to load any score data", e);
             }
         }
 
-        function escapeHtml(text) {
-            if (!text) return '';
-            return text
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;");
+        async function loadAssessmentData() {
+            try {
+                const res = await fetch('feedback.csv?t=' + new Date().getTime());
+                if (!res.ok) throw new Error("無法讀取 feedback.csv");
+                const text = await res.text();
+                const rows = parseCSV(text);
+
+                if (rows.length < 2) return;
+
+                const headers = rows[0].map(h => h.trim());
+                const nameIdx = headers.indexOf('姓名');
+
+                assessmentData = rows.slice(1).map(r => {
+                    const name = r[nameIdx] ? r[nameIdx].trim() : '未知';
+                    const employeeInfo = staffDir[name] || { org: '未分類' };
+
+                    const answers = {};
+                    SECTIONS.forEach(sec => {
+                        sec.items.forEach(item => {
+                            answers[item.colIndex] = r[item.colIndex] || '';
+                        });
+                    });
+
+                    return {
+                        name: name,
+                        org: employeeInfo.org,
+                        unit: employeeInfo.unit || '',
+                        answers: answers
+                    };
+                }).filter(d => d.name !== '未知');
+
+            } catch (e) {
+                document.getElementById('contentArea').innerHTML = `<div class="loading" style="color:red">載入失敗: ${e.message}</div>`;
+            }
         }
 
+        function renderList() {
+            const orgFilter = document.getElementById('orgFilter').value;
+            const unitFilter = document.getElementById('unitFilter').value;
+            const nameFilter = document.getElementById('nameFilter').value.trim();
+            const container = document.getElementById('contentArea');
+
+            let filtered = assessmentData.filter(d => {
+                // Org filter
+                if (orgFilter !== 'all' && d.org !== orgFilter) return false;
+                // Unit filter
+                if (unitFilter !== 'all' && d.unit !== unitFilter) return false;
+                // Name filter (Search)
+                if (nameFilter && !d.name.includes(nameFilter)) return false;
+                return true;
+            });
+
+            if (filtered.length === 0) {
+                container.innerHTML = '<div class="loading">無資料顯示</div>';
+                return;
+            }
+
+            // Sort data: Org -> Unit -> Name
+            filtered.sort((a, b) => {
+                if (a.org !== b.org) return a.org.localeCompare(b.org);
+                if (a.unit !== b.unit) {
+                    // Put empty unit at end
+                    if (!a.unit) return 1;
+                    if (!b.unit) return -1;
+                    return a.unit.localeCompare(b.unit);
+                }
+                return a.name.localeCompare(b.name);
+            });
+
+            let html = '';
+            let currentUnitGroup = null;
+
+            filtered.forEach((emp, index) => {
+                // Insert Unit Header if changed
+                const displayUnit = emp.unit || '其他';
+                const displayGroupKey = `${emp.org} - ${displayUnit}`;
+
+                if (displayGroupKey !== currentUnitGroup) {
+                    currentUnitGroup = displayGroupKey;
+                    html += `<div class="group-header" style="
+                        margin: 30px 0 15px 0; 
+                        padding: 8px 15px; 
+                        background: #e0e7ff; 
+                        color: #3730a3; 
+                        border-radius: 6px; 
+                        font-weight: bold; 
+                        font-size: 1.1em;
+                        border-left: 5px solid #4f46e5;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                    ">
+                        <span>${emp.org} <i class="fa-solid fa-chevron-right" style="font-size:0.8em; margin:0 5px;"></i> ${displayUnit}</span>
+                    </div>`;
+                }
+
+                // Get saved bonus
+                const serverBonus = bonuses[emp.name];
+                const localBonus = localStorage.getItem(`assessment_bonus_${emp.name}`);
+                const bonusVal = (serverBonus !== undefined) ? serverBonus : (localBonus || 0);
+
+                // Get score data
+                const scores = scoreData[emp.name] || {};
+                const baseScore = parseFloat(scores.average_score || 0);
+
+                let finalScoreDisplay = '-';
+                if (baseScore > 0) {
+                    finalScoreDisplay = (baseScore + parseFloat(bonusVal)).toFixed(2);
+                }
+
+                html += `
+                <div class="employee-assessment-card">
+                    <div class="card-header">
+                        <div class="employee-name">${emp.name}</div>
+                        <div class="employee-org">${emp.org}</div>
+                    </div>
+                    <div class="card-body">
+                        <!-- Left: Assessment Content -->
+                        <div class="assessment-content">
+                `;
+
+                SECTIONS.forEach(sec => {
+                    html += `<div class="section-block">
+                        <div class="section-title">${sec.title}</div>`;
+
+                    sec.items.forEach(item => {
+                        const ans = emp.answers[item.colIndex];
+                        if (ans) {
+                            html += `
+                            <div class="qa-item">
+                                <div class="question">${item.q}</div>
+                                <div class="answer">${escapeHtml(ans)}</div>
+                            </div>`;
+                        } else {
+                            html += `<div class="qa-item"><div class="question">${item.q}</div><div class="answer" style="color:#ccc;">(未填寫)</div></div>`;
+                        }
+                    });
+
+                    html += `</div>`;
+                });
+
+                html += `</div> <!-- End assessment-content -->`;
+
+                // Right: Score Dashboard
+                const orgColor = getOrgColor(emp.org);
+                const unitBadge = emp.unit ? `<span style="background:#eef2ff; color:#4f46e5; padding:2px 8px; border-radius:4px; font-size:12px; margin-right:5px;">${emp.unit}</span>` : '';
+
+                html += `
+                        <div class="score-sidebar">
+                            <a href="index.html?search=${encodeURIComponent(emp.name)}" target="_blank" style="text-decoration:none; color:inherit; display:block;">
+                            <div class="score-card" style="border:1px solid #eee; border-radius:12px; padding:20px; transition: transform 0.2s;">
+                                <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:15px;">
+                                    <div>
+                                        <h3 style="margin:0; font-size:22px; color:#1e293b;">${emp.name}</h3>
+                                        <div style="margin-top:8px;">
+                                            <span style="background:${orgColor.bg}; color:${orgColor.text}; padding:4px 10px; border-radius:6px; font-size:13px; font-weight:500;">${emp.org}</span>
+                                            ${unitBadge}
+                                        </div>
+                                    </div>
+                                    <div style="width:60px; height:60px; background:linear-gradient(135deg, #4f46e5, #818cf8); border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-size:20px; font-weight:bold; box-shadow:0 4px 6px -1px rgba(79, 70, 229, 0.3);">
+                                        ${baseScore > 0 ? baseScore.toFixed(0) : '-'}
+                                    </div>
+                                </div>
+                                
+                                <div style="background:#f8fafc; border-radius:8px; padding:12px; font-size:13px; color:#64748b; line-height:1.6; margin-bottom:15px;">
+                                    ${getDetailedBreakdown(scores)}
+                                </div>
+
+                                <div style="display:flex; justify-content:space-between; align-items:center;">
+                                    <div style="display:flex; gap:15px; font-size:14px; font-weight:500; color:#475569;">
+                                        <span><i class="fa-solid fa-users" style="color:#cbd5e1; margin-right:4px;"></i> ${scores.rater_count || 0} 人評分</span>
+                                    </div>
+                                    <div style="font-size:12px; color:#94a3b8;">
+                                        點擊查看詳情 <i class="fa-solid fa-arrow-right"></i>
+                                    </div>
+                                </div>
+                            </div>
+                            </a>
+
+                            <!-- Edit Bonus Section -->
+                            <div class="bonus-section" style="margin-top:20px;">
+                                <div class="bonus-input-group">
+                                    <span class="bonus-label">加分 (Max 3)</span>
+                                    <input type="number" class="bonus-input" id="bonus-${index}" 
+                                        min="0" max="3" step="1"
+                                        value="${bonusVal}" 
+                                        onchange="updateBonus('${emp.name}', ${index}, ${baseScore}, this.value)">
+                                </div>
+                                <div class="raters-list">請根據左側自我考核內容，給予適當加分（限整數）。</div>
+                                
+                                <div class="final-score-row">
+                                    <span class="final-score-label">最終總分</span>
+                                    <span class="final-score-value" id="final-${index}">${finalScoreDisplay}</span>
+                                </div>
+                            </div>
+                        </div> <!-- End score-sidebar -->
+                    </div> <!-- End card-body -->
+                </div>`;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function getOrgColor(org) {
+            // Returns basic colors for badges
+            if (org === '兒少之家') return { bg: '#eff6ff', text: '#2563eb' }; // Blue
+            if (org === '少年家園') return { bg: '#fef2f2', text: '#dc2626' }; // Red
+            if (org === '諮商所') return { bg: '#ecfdf5', text: '#059669' }; // Green
+            if (org === '基金會') return { bg: '#fdf4ff', text: '#c026d3' }; // Purple
+            return { bg: '#f1f5f9', text: '#475569' }; // Gray
+        }
+
+        function getDetailedBreakdown(scores) {
+            if (!scores.average_score) return "尚無詳細評分資料";
+            // Show Cat1, Cat2, Cat3, Total from Supabase data
+            const cat1 = scores.cat1_rounded !== undefined ? scores.cat1_rounded : '-';
+            const cat2 = scores.cat2_rounded !== undefined ? scores.cat2_rounded : '-';
+            const cat3 = scores.cat3_rounded !== undefined ? scores.cat3_rounded : '-';
+            const total = scores.average_score !== undefined ? scores.average_score : '-';
+
+            return `
+                <div style="display:flex; justify-content:space-between; gap:10px; text-align:center;">
+                    <div style="flex:1; background:#fff; padding:10px; border-radius:8px; border:1px solid #e2e8f0;">
+                        <div style="font-size:11px; color:#94a3b8; margin-bottom:4px;">第一大類</div>
+                        <div style="font-size:18px; font-weight:bold; color:#4f46e5;">${cat1}</div>
+                        <div style="font-size:10px; color:#cbd5e1;">(滿分40)</div>
+                    </div>
+                    <div style="flex:1; background:#fff; padding:10px; border-radius:8px; border:1px solid #e2e8f0;">
+                        <div style="font-size:11px; color:#94a3b8; margin-bottom:4px;">第二大類</div>
+                        <div style="font-size:18px; font-weight:bold; color:#10b981;">${cat2}</div>
+                        <div style="font-size:10px; color:#cbd5e1;">(滿分30)</div>
+                    </div>
+                    <div style="flex:1; background:#fff; padding:10px; border-radius:8px; border:1px solid #e2e8f0;">
+                        <div style="font-size:11px; color:#94a3b8; margin-bottom:4px;">第三大類</div>
+                        <div style="font-size:18px; font-weight:bold; color:#f59e0b;">${cat3}</div>
+                        <div style="font-size:10px; color:#cbd5e1;">(滿分30)</div>
+                    </div>
+                </div>
+                <div style="margin-top:10px; text-align:center; padding:8px; background:#fff; border-radius:8px; border:1px solid #e2e8f0;">
+                    <span style="font-size:12px; color:#64748b;">總分：</span>
+                    <span style="font-size:20px; font-weight:bold; color:#1e293b;">${total}</span>
+                    <span style="font-size:11px; color:#94a3b8;"> / 100</span>
+                </div>
+            `;
+
+            window.updateBonus = async function (name, idx, baseScore, val) {
+                let numVal = parseInt(val, 10);
+                if (isNaN(numVal)) numVal = 0;
+
+                if (numVal > 3) { numVal = 3; document.getElementById(`bonus-${idx}`).value = 3; }
+                if (numVal < 0) { numVal = 0; document.getElementById(`bonus-${idx}`).value = 0; }
+
+                // 1. Save to Local Storage (Immediate local cache)
+                localStorage.setItem(`assessment_bonus_${name}`, numVal);
+
+                // 2. Save to Supabase (Real-time sync)
+                try {
+                    if (typeof saveBonusInSupabase === 'function') {
+                        await saveBonusInSupabase(name, numVal);
+                        console.log("Saved bonus to Supabase");
+                    }
+                } catch (e) {
+                    console.error("Failed to save bonus to Supabase", e);
+                }
+
+                // 3. Save to Local Server (for backup/localhost)
+                try {
+                    await fetch('/api/save_bonus', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: name, bonus: numVal })
+                    });
+                } catch (e) { console.error("Failed to save bonus to server", e); }
+
+                // 4. Update UI
+                if (baseScore > 0) {
+                    const final = (baseScore + numVal).toFixed(2);
+                    document.getElementById(`final-${idx}`).innerText = final;
+                }
+            }
+
+            function escapeHtml(text) {
+                if (!text) return '';
+                return text
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#039;");
+            }
 
 
-        // Event listeners removed here as they are now in setupFilters() inside init()
 
-        init();
+            // Event listeners removed here as they are now in setupFilters() inside init()
+
+            init();
     </script>
 </body>
 
