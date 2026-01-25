@@ -163,3 +163,53 @@ async function exportBackupCSV() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 }
+
+// Save Bonus (Using 'SYSTEM_BONUS' as rater in scores table)
+async function saveBonusInSupabase(name, bonus) {
+    // Check if exists
+    const endpoint = `scores?ratee=eq.${encodeURIComponent(name)}&rater=eq.SYSTEM_BONUS&select=id`;
+    const existing = await supabaseRequest(endpoint);
+
+    const bonusVal = parseInt(bonus) || 0;
+
+    if (existing && existing.length > 0) {
+        // Update
+        return await supabaseRequest(`scores?id=eq.${existing[0].id}`, {
+            method: 'PATCH',
+            body: {
+                cat1: bonusVal, // Use cat1 to store bonus
+                cat2: 0,
+                cat3: 0,
+                total: bonusVal
+            }
+        });
+    } else {
+        // Insert
+        return await supabaseRequest('scores', {
+            method: 'POST',
+            body: {
+                ratee: name,
+                rater: 'SYSTEM_BONUS',
+                cat1: bonusVal,
+                cat2: 0,
+                cat3: 0,
+                total: bonusVal,
+                original_cat1: bonusVal,
+                original_cat2: 0,
+                original_cat3: 0
+            }
+        });
+    }
+}
+
+// Fetch Bonuses
+async function fetchBonusesFromSupabase() {
+    const scores = await supabaseRequest('scores?rater=eq.SYSTEM_BONUS&select=ratee,cat1');
+    const bonuses = {};
+    if (scores) {
+        scores.forEach(s => {
+            bonuses[s.ratee] = s.cat1;
+        });
+    }
+    return bonuses;
+}
