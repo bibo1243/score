@@ -116,13 +116,24 @@ class ScoreHandler(SimpleHTTPRequestHandler):
             self.end_headers()
             
             bonuses = {}
-            bonus_file = os.path.join(BASE_DIR, 'bonuses.json')
-            if os.path.exists(bonus_file):
-                try:
-                    with open(bonus_file, 'r', encoding='utf-8') as f:
-                        bonuses = json.load(f)
-                except:
-                    bonuses = {}
+            if USE_SUPABASE:
+                # Fetch bonuses from scores table where rater is _SYSTEM_BONUS_
+                import urllib.parse
+                rater_encoded = urllib.parse.quote('_SYSTEM_BONUS_')
+                result = supabase_request(f'scores?rater=eq.{rater_encoded}&select=ratee,cat1')
+                if result:
+                    for row in result:
+                        name = row.get('ratee')
+                        bonus = int(row.get('cat1', 0))
+                        bonuses[name] = bonus
+            else:
+                bonus_file = os.path.join(BASE_DIR, 'bonuses.json')
+                if os.path.exists(bonus_file):
+                    try:
+                        with open(bonus_file, 'r', encoding='utf-8') as f:
+                            bonuses = json.load(f)
+                    except:
+                        bonuses = {}
             self.wfile.write(json.dumps(bonuses, ensure_ascii=False).encode('utf-8'))
             return
 
@@ -153,19 +164,70 @@ class ScoreHandler(SimpleHTTPRequestHandler):
                 bonus = data.get('bonus')
                 
                 if name is not None and bonus is not None:
-                    bonus_file = os.path.join(BASE_DIR, 'bonuses.json')
-                    bonuses = {}
-                    if os.path.exists(bonus_file):
+                    if USE_SUPABASE:
+                        import urllib.parse
+                        rater = '_SYSTEM_BONUS_'
+                        ratee = name
+                        bonus_val = int(bonus)
+                        
+                        ratee_encoded = urllib.parse.quote(ratee)
+                        rater_encoded = urllib.parse.quote(rater)
+                        
+                        # Check if exists
+                        check_url = f"{SUPABASE_URL}/rest/v1/scores?ratee=eq.{ratee_encoded}&rater=eq.{rater_encoded}&select=id"
+                        headers = {
+                            'apikey': SUPABASE_SERVICE_KEY,
+                            'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
+                            'Content-Type': 'application/json'
+                        }
+                        
+                        exists = False
                         try:
-                            with open(bonus_file, 'r', encoding='utf-8') as f:
-                                bonuses = json.load(f)
+                            req = urllib.request.Request(check_url, headers=headers, method='GET')
+                            with urllib.request.urlopen(req) as response:
+                                res = json.loads(response.read().decode('utf-8'))
+                                if res and len(res) > 0:
+                                    exists = True
                         except:
                             pass
-                    
-                    bonuses[name] = int(bonus)
-                    
-                    with open(bonus_file, 'w', encoding='utf-8') as f:
-                        json.dump(bonuses, f, ensure_ascii=False, indent=2)
+                        
+                        if exists:
+                            # Update (PATCH)
+                            update_data = {
+                                'cat1': bonus_val
+                            }
+                            url = f"{SUPABASE_URL}/rest/v1/scores?ratee=eq.{ratee_encoded}&rater=eq.{rater_encoded}"
+                            req = urllib.request.Request(url, data=json.dumps(update_data).encode('utf-8'), headers=headers, method='PATCH')
+                        else:
+                            # Insert (POST)
+                            new_data = {
+                                'ratee': ratee,
+                                'rater': rater,
+                                'cat1': bonus_val,
+                                'cat2': 0,
+                                'cat3': 0
+                            }
+                            url = f"{SUPABASE_URL}/rest/v1/scores"
+                            headers['Prefer'] = 'return=representation'
+                            req = urllib.request.Request(url, data=json.dumps(new_data).encode('utf-8'), headers=headers, method='POST')
+                            
+                        with urllib.request.urlopen(req) as response:
+                            pass
+                            
+                    else:
+                        bonus_file = os.path.join(BASE_DIR, 'bonuses.json')
+                        bonuses = {}
+                        if os.path.exists(bonus_file):
+                            try:
+                                with open(bonus_file, 'r', encoding='utf-8') as f:
+                                    bonuses = json.load(f)
+                            except:
+                                pass
+                        
+                        bonuses[name] = int(bonus)
+                        
+                        with open(bonus_file, 'w', encoding='utf-8') as f:
+                            json.dump(bonuses, f, ensure_ascii=False, indent=2)
                         
                     self.send_response(200)
                     self.send_header('Content-type', 'application/json')
@@ -738,6 +800,11 @@ class ScoreHandler(SimpleHTTPRequestHandler):
                 for row in result:
                     ratee = row.get('ratee', '').strip()
                     rater = row.get('rater', '').strip()
+                    
+                    # Skip system bonus records
+                    if rater == '_SYSTEM_BONUS_':
+                        continue
+                        
                     cat1 = float(row.get('cat1', 0) or 0)
                     cat2 = float(row.get('cat2', 0) or 0)
                     cat3 = float(row.get('cat3', 0) or 0)
