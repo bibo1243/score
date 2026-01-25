@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>自我考核表拆分</title>
+    <title>自我考核表拆分 (除錯模式 v2)</title>
     <link rel="stylesheet" href="style.css">
     <style>
         .page-container {
@@ -738,7 +738,7 @@
             // 2. Save to Server (Strategy Pattern)
             let saved = false;
 
-            // Strategy A: Local API (for localhost with server.py)
+            // Strategy A: Local API
             try {
                 const res = await fetch('/api/save_bonus', {
                     method: 'POST',
@@ -755,10 +755,10 @@
                 try {
                     await saveBonusToSupabase(name, numVal);
                     saved = true;
-                    console.log("Saved to Supabase directly");
+                    // alert("成功寫入資料庫！(Direct)");
                 } catch (e) {
-                    console.error("Failed to save bonus to server/db", e);
-                    // Optional: alert user
+                    console.error("Supabase Save Error:", e);
+                    alert("寫入資料庫失敗:\n" + e.message);
                 }
             }
 
@@ -770,55 +770,63 @@
         }
 
         async function saveBonusToSupabase(name, bonus) {
-            // WARNING: Exposing Service Key in frontend is NOT secure. Internal use only.
-            const SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFjcmtjbG1kZXJxZXdjd3Vnc25sIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NjI1NzQzMCwiZXhwIjoyMDgxODMzNDMwfQ.ZCQl_0dsfPdkG43zQsF47lbbhA6ybiGLa2fw0zSKGzQ";
-            const SUPABASE_URL = 'https://acrkclmderqewcwugsnl.supabase.co';
+            try {
+                // WARNING: Exposing Service Key in frontend is NOT secure. Internal use only.
+                const SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFjcmtjbG1kZXJxZXdjd3Vnc25sIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NjI1NzQzMCwiZXhwIjoyMDgxODMzNDMwfQ.ZCQl_0dsfPdkG43zQsF47lbbhA6ybiGLa2fw0zSKGzQ";
+                const SUPABASE_URL = 'https://acrkclmderqewcwugsnl.supabase.co';
 
-            async function serviceRequest(endpoint, options = {}) {
-                const url = `${SUPABASE_URL}/rest/v1/${endpoint}`;
-                const headers = {
-                    'apikey': SERVICE_KEY,
-                    'Authorization': `Bearer ${SERVICE_KEY}`,
-                    'Content-Type': 'application/json',
-                    'Prefer': options.prefer || 'return=representation'
-                };
+                async function serviceRequest(endpoint, options = {}) {
+                    const url = `${SUPABASE_URL}/rest/v1/${endpoint}`;
+                    const headers = {
+                        'apikey': SERVICE_KEY,
+                        'Authorization': `Bearer ${SERVICE_KEY}`,
+                        'Content-Type': 'application/json',
+                        'Prefer': options.prefer || 'return=representation'
+                    };
 
-                const res = await fetch(url, {
-                    method: options.method || 'GET',
-                    headers: headers,
-                    body: options.body ? JSON.stringify(options.body) : undefined
-                });
-                if (!res.ok) throw new Error(await res.text());
-                const text = await res.text();
-                return text ? JSON.parse(text) : null;
-            }
-
-            const rater = '_SYSTEM_BONUS_';
-            const ratee = name;
-
-            // Check if record exists
-            const checkUrl = `scores?ratee=eq.${encodeURIComponent(ratee)}&rater=eq.${encodeURIComponent(rater)}&select=id`;
-            const existing = await serviceRequest(checkUrl);
-
-            if (existing && existing.length > 0) {
-                // Update (PATCH)
-                const updateUrl = `scores?ratee=eq.${encodeURIComponent(ratee)}&rater=eq.${encodeURIComponent(rater)}`;
-                await serviceRequest(updateUrl, {
-                    method: 'PATCH',
-                    body: { cat1: bonus }
-                });
-            } else {
-                // Insert (POST)
-                await serviceRequest('scores', {
-                    method: 'POST',
-                    body: {
-                        ratee: ratee,
-                        rater: rater,
-                        cat1: bonus,
-                        cat2: 0,
-                        cat3: 0
+                    const res = await fetch(url, {
+                        method: options.method || 'GET',
+                        headers: headers,
+                        body: options.body ? JSON.stringify(options.body) : undefined
+                    });
+                    if (!res.ok) {
+                        const errText = await res.text();
+                        throw new Error(`Status ${res.status}: ${errText}`);
                     }
-                });
+                    const text = await res.text();
+                    return text ? JSON.parse(text) : null;
+                }
+
+                const rater = '_SYSTEM_BONUS_';
+                const ratee = name;
+
+                // Check if record exists
+                const checkUrl = `scores?ratee=eq.${encodeURIComponent(ratee)}&rater=eq.${encodeURIComponent(rater)}&select=id`;
+                const existing = await serviceRequest(checkUrl);
+
+                if (existing && existing.length > 0) {
+                    // Update (PATCH)
+                    const updateUrl = `scores?ratee=eq.${encodeURIComponent(ratee)}&rater=eq.${encodeURIComponent(rater)}`;
+                    await serviceRequest(updateUrl, {
+                        method: 'PATCH',
+                        body: { cat1: bonus }
+                    });
+                } else {
+                    // Insert (POST)
+                    await serviceRequest('scores', {
+                        method: 'POST',
+                        body: {
+                            ratee: ratee,
+                            rater: rater,
+                            cat1: bonus,
+                            cat2: 0,
+                            cat3: 0
+                        }
+                    });
+                }
+            } catch (err) {
+                // Re-throw to be caught by caller
+                throw err;
             }
         }
 
