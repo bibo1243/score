@@ -92,10 +92,14 @@ async function processScoresForDisplay(rawScores) {
         const ratee = row.ratee;
         if (!ratee) return;
 
-        // Filter out System Bonus Rater
+        // Filter out System Raters
         if (row.rater === '_SYSTEM_BONUS_') {
             bonuses[ratee] = parseFloat(row.cat1) || 0;
-            return; // Do not add to employeeRaters
+            return;
+        }
+        if (row.rater === '_SYSTEM_H1_') {
+            // H1 score is distinct, strictly for display in self-assessment
+            return;
         }
 
         if (!employeeRaters[ratee]) employeeRaters[ratee] = [];
