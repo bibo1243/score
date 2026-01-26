@@ -951,6 +951,11 @@
                 const ratee = row.ratee;
                 if (!ratee) return;
 
+                // Filter out System Raters
+                if (row.rater === '_SYSTEM_BONUS_' || row.rater === '_SYSTEM_H1_') {
+                    return;
+                }
+
                 if (!employees[ratee]) {
                     employees[ratee] = {
                         name: ratee,
