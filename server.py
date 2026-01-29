@@ -13,7 +13,7 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse
 from collections import defaultdict
 
-PORT = 8080
+PORT = 8081
 BASE_DIR = '/Users/leegary/考核'
 
 # Supabase configuration
@@ -1085,8 +1085,10 @@ class ScoreHandler(SimpleHTTPRequestHandler):
         
         # ============================================================
         # TWO-PHASE CALCULATION
-        # Phase 1: Calculate BASE scores for ALL employees (from actual ratings)
-        # Phase 2: Apply subordinate performance for supervisors
+        # Phase 1: Calculate BASE scores for ALL employees
+        #   Round 1A: Employees WITHOUT subordinate_rules (manager + peer ratings)
+        #   Round 1B: Employees WITH subordinate_rules (manager + subordinate performance)
+        # Phase 2: Build final output with full breakdown details
         # ============================================================
         
         # Standard rounding to 2 decimal places (四捨五入)
@@ -1099,12 +1101,29 @@ class ScoreHandler(SimpleHTTPRequestHandler):
             quantizer = Decimal(10) ** -places  # e.g., 0.01 for places=2
             return float(d.quantize(quantizer, rounding=ROUND_HALF_UP))
         
+        import math
+        def custom_round(value):
+            first_decimal = int((value * 10) % 10)
+            if first_decimal >= 1:
+                return math.ceil(value)
+            else:
+                return math.floor(value)
+        
         rating_rules_data = self.load_rating_rules()
         
-        # Phase 1: Calculate base scores (simple weighted average from actual raters)
+        # Phase 1: Calculate base scores using iterative multi-round approach
+        # This handles arbitrarily deep dependency chains (e.g., A depends on B which depends on C)
         base_scores = {}  # Store base scores for each employee: {name: {cat1_avg, cat2_avg, cat3_avg, ...}}
         
-        for employee, scores in employee_scores.items():
+        # First, identify which employees have subordinate_rules
+        employees_with_sub_rules = set()
+        for employee in employee_scores.keys():
+            emp_config = rating_rules_data.get("employees", {}).get(employee, {})
+            if emp_config.get("subordinate_rules", []):
+                employees_with_sub_rules.add(employee)
+        
+        # Helper function to calculate base score for an employee
+        def calc_base_score_for_employee(employee, use_sub_rules=False):
             current_raters = employee_raters[employee]
             emp_config = rating_rules_data.get("employees", {}).get(employee, {})
             manager_weight_setting = emp_config.get("manager_weight", 0.5)
@@ -1112,72 +1131,69 @@ class ScoreHandler(SimpleHTTPRequestHandler):
             sub_rules = emp_config.get("subordinate_rules", [])
             excluded_peers = set(emp_config.get("excluded_peers", []))
             
-            # For phase 1, only use "主管" and "其他同仁" - no subordinate rules yet
-            sub_total_weight = sum(r.get("weight", 0) for r in sub_rules)
-            
-            # If employee has subordinate rules, peer_weight = 0
-            # Otherwise, peer_weight = 1.0 - manager_weight
-            if sub_rules:
-                peer_weight_setting = 0.0
-            else:
-                peer_weight_setting = max(0.0, 1.0 - manager_weight_setting)
-            
-            import math
-            def custom_round(value):
-                first_decimal = int((value * 10) % 10)
-                if first_decimal >= 1:
-                    return math.ceil(value)
-                else:
-                    return math.floor(value)
-            
-            # Collect all subordinate members for proper exclusion
-            all_subordinate_members = set()
-            for rule in sub_rules:
-                all_subordinate_members.update(rule.get("members", []))
-            
-            # Create matchers with frozen sets for closure
             frozen_managers = frozenset(my_managers)
-            frozen_all_sub = frozenset(all_subordinate_members)
             frozen_excluded = frozenset(excluded_peers)
             
-            groups = []
-            # Managers group
-            if manager_weight_setting > 0:
-                groups.append({
-                    "desc": "主管",
-                    "weight": manager_weight_setting,
-                    "matcher": lambda n, mg=frozen_managers: n in mg,
-                })
-            
-            # Peers group (only if no subordinate rules)
-            if peer_weight_setting > 0:
-                groups.append({
-                    "desc": "其他同仁",
-                    "weight": peer_weight_setting,
-                    "matcher": lambda n, mg=frozen_managers, sub=frozen_all_sub, excl=frozen_excluded: \
-                        n not in mg and n not in sub and n not in excl,
-                })
-            
-            # Calculate weighted averages from actual raters
             total_cat1_weighted = 0
             total_cat2_weighted = 0
             total_cat3_weighted = 0
             total_weight_used = 0
             
-            for group in groups:
-                weight = group["weight"]
-                matcher = group["matcher"]
-                
-                filtered_raters = [r for r in current_raters if matcher(r['name'])]
-                if len(filtered_raters) > 0:
-                    group_cat1 = sum(r['cat1'] for r in filtered_raters) / len(filtered_raters)
-                    group_cat2 = sum(r['cat2'] for r in filtered_raters) / len(filtered_raters)
-                    group_cat3 = sum(r['cat3'] for r in filtered_raters) / len(filtered_raters)
+            # A. Managers group (from actual ratings)
+            if manager_weight_setting > 0:
+                mgr_raters = [r for r in current_raters if r['name'] in frozen_managers]
+                if len(mgr_raters) > 0:
+                    mgr_cat1 = sum(r['cat1'] for r in mgr_raters) / len(mgr_raters)
+                    mgr_cat2 = sum(r['cat2'] for r in mgr_raters) / len(mgr_raters)
+                    mgr_cat3 = sum(r['cat3'] for r in mgr_raters) / len(mgr_raters)
                     
-                    total_cat1_weighted += group_cat1 * weight
-                    total_cat2_weighted += group_cat2 * weight
-                    total_cat3_weighted += group_cat3 * weight
-                    total_weight_used += weight
+                    total_cat1_weighted += mgr_cat1 * manager_weight_setting
+                    total_cat2_weighted += mgr_cat2 * manager_weight_setting
+                    total_cat3_weighted += mgr_cat3 * manager_weight_setting
+                    total_weight_used += manager_weight_setting
+            
+            if use_sub_rules and sub_rules:
+                # B. Subordinate Rules (use subordinates' base_scores)
+                for rule in sub_rules:
+                    rule_weight = rule.get("weight", 0)
+                    rule_members = rule.get("members", [])
+                    
+                    if rule_weight <= 0:
+                        continue
+                    
+                    sub_cat1_scores = []
+                    sub_cat2_scores = []
+                    sub_cat3_scores = []
+                    
+                    for member in rule_members:
+                        if member in base_scores:
+                            sub_cat1_scores.append(base_scores[member]['cat1_avg'])
+                            sub_cat2_scores.append(base_scores[member]['cat2_avg'])
+                            sub_cat3_scores.append(base_scores[member]['cat3_avg'])
+                    
+                    if len(sub_cat1_scores) > 0:
+                        rule_cat1 = sum(sub_cat1_scores) / len(sub_cat1_scores)
+                        rule_cat2 = sum(sub_cat2_scores) / len(sub_cat2_scores)
+                        rule_cat3 = sum(sub_cat3_scores) / len(sub_cat3_scores)
+                        
+                        total_cat1_weighted += rule_cat1 * rule_weight
+                        total_cat2_weighted += rule_cat2 * rule_weight
+                        total_cat3_weighted += rule_cat3 * rule_weight
+                        total_weight_used += rule_weight
+            else:
+                # C. Peers group (for employees without sub_rules)
+                peer_weight_setting = max(0.0, 1.0 - manager_weight_setting)
+                if peer_weight_setting > 0:
+                    peer_raters = [r for r in current_raters if r['name'] not in frozen_managers and r['name'] not in frozen_excluded]
+                    if len(peer_raters) > 0:
+                        peer_cat1 = sum(r['cat1'] for r in peer_raters) / len(peer_raters)
+                        peer_cat2 = sum(r['cat2'] for r in peer_raters) / len(peer_raters)
+                        peer_cat3 = sum(r['cat3'] for r in peer_raters) / len(peer_raters)
+                        
+                        total_cat1_weighted += peer_cat1 * peer_weight_setting
+                        total_cat2_weighted += peer_cat2 * peer_weight_setting
+                        total_cat3_weighted += peer_cat3 * peer_weight_setting
+                        total_weight_used += peer_weight_setting
             
             # Fallback: simple average if no groups matched
             all_cat1 = [r['cat1'] for r in current_raters]
@@ -1202,21 +1218,59 @@ class ScoreHandler(SimpleHTTPRequestHandler):
                 cat2_avg = simple_cat2_avg
                 cat3_avg = simple_cat3_avg
             
-            base_scores[employee] = {
+            return {
                 'cat1_avg': cat1_avg,
                 'cat2_avg': cat2_avg,
                 'cat3_avg': cat3_avg,
-                'simple_cat1_avg': simple_cat1_avg,  # Added
-                'simple_cat2_avg': simple_cat2_avg,  # Added
-                'simple_cat3_avg': simple_cat3_avg,  # Added
+                'simple_cat1_avg': simple_cat1_avg,
+                'simple_cat2_avg': simple_cat2_avg,
+                'simple_cat3_avg': simple_cat3_avg,
                 'cat1_rounded': custom_round(cat1_avg),
                 'cat2_rounded': custom_round(cat2_avg),
                 'cat3_rounded': custom_round(cat3_avg),
-                'has_subordinate_rules': len(sub_rules) > 0,
-                'sub_rules': sub_rules,
+                'has_subordinate_rules': use_sub_rules and bool(sub_rules),
+                'sub_rules': sub_rules if use_sub_rules else [],
                 'manager_weight': manager_weight_setting,
                 'my_managers': my_managers,
             }
+        
+        # Round 1A: Calculate base scores for employees WITHOUT subordinate_rules
+        for employee in employee_scores.keys():
+            if employee not in employees_with_sub_rules:
+                base_scores[employee] = calc_base_score_for_employee(employee, use_sub_rules=False)
+        
+        # Iterative rounds: Calculate employees WITH subordinate_rules
+        # Keep iterating until all employees are calculated or no progress is made
+        remaining = set(employees_with_sub_rules)
+        max_iterations = 10  # Safety limit to prevent infinite loops
+        iteration = 0
+        
+        while remaining and iteration < max_iterations:
+            iteration += 1
+            processed_this_round = set()
+            
+            for employee in remaining:
+                emp_config = rating_rules_data.get("employees", {}).get(employee, {})
+                sub_rules = emp_config.get("subordinate_rules", [])
+                
+                # Check if ALL subordinate members are already in base_scores
+                all_members = set()
+                for rule in sub_rules:
+                    all_members.update(rule.get("members", []))
+                
+                if all_members.issubset(base_scores.keys()):
+                    # All dependencies are ready, we can calculate this employee
+                    base_scores[employee] = calc_base_score_for_employee(employee, use_sub_rules=True)
+                    processed_this_round.add(employee)
+            
+            remaining -= processed_this_round
+            
+            # If no progress was made, break (handles circular dependencies)
+            if not processed_this_round:
+                # For remaining employees, calculate without subordinate performance
+                for employee in remaining:
+                    base_scores[employee] = calc_base_score_for_employee(employee, use_sub_rules=True)
+                break
         
         # Phase 2: Build final output with subordinate performance applied
         output_data = []
@@ -1356,6 +1410,7 @@ class ScoreHandler(SimpleHTTPRequestHandler):
                 group_type = group.get("type", "rater")
                 expected_members = group.get("members", [])
                 
+                
                 if weight <= 0:
                     continue
 
@@ -1370,12 +1425,13 @@ class ScoreHandler(SimpleHTTPRequestHandler):
                     rater_details_cat3 = []
                     
                     for member in expected_members:
+
                         if member in base_scores:
                             member_scores = base_scores[member]
-                            # Use SIMPLE average for subordinate performance component
-                            s1 = member_scores.get('simple_cat1_avg', member_scores['cat1_avg'])
-                            s2 = member_scores.get('simple_cat2_avg', member_scores['cat2_avg'])
-                            s3 = member_scores.get('simple_cat3_avg', member_scores['cat3_avg'])
+                            # Use WEIGHTED average for subordinate performance (consistent with employee detail page)
+                            s1 = member_scores['cat1_avg']
+                            s2 = member_scores['cat2_avg']
+                            s3 = member_scores['cat3_avg']
                             
                             sub_cat1_scores.append(s1)
                             sub_cat2_scores.append(s2)

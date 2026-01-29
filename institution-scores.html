@@ -848,7 +848,7 @@
                             ? group.raterDetails.map(rd => `
                                                 <div class="rater-item">
                                                     <span class="rater-name">${rd.name}</span>
-                                                    <span class="rater-score">${typeof rd.score === 'number' ? rd.score.toFixed(1) : `<span style="font-size:0.8em; color:#999;">${rd.score}</span>`}</span>
+                                                    <span class="rater-score">${typeof rd.score === 'number' ? rd.score.toFixed(2) : `<span style="font-size:0.8em; color:#999;">${rd.score}</span>`}</span>
                                                 </div>
                                             `).join('')
                             : `<div style="padding: 4px 10px; color: #94a3b8; font-style: italic;">無資料</div>`
@@ -1089,7 +1089,7 @@
                                     ? group.raterDetails.map(rd => `
                                                                         <div class="rater-item">
                                                                             <span class="rater-name">${rd.name}</span>
-                                                                            <span class="rater-score">${typeof rd.score === 'number' ? rd.score.toFixed(1) : `<span style="font-size:0.8em; color:#999;">${rd.score}</span>`}</span>
+                                                                            <span class="rater-score">${typeof rd.score === 'number' ? rd.score.toFixed(2) : `<span style="font-size:0.8em; color:#999;">${rd.score}</span>`}</span>
                                                                         </div>
                                                                     `).join('')
                                     : `<div style="padding: 4px 10px; color: #94a3b8; font-style: italic;">無資料</div>`

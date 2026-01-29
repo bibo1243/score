@@ -3,7 +3,7 @@ import json
 import urllib.request
 
 # Fetch data from API
-url = "http://localhost:8080/api/data"
+url = "http://localhost:8081/api/data"
 with urllib.request.urlopen(url) as response:
     data = json.loads(response.read().decode('utf-8'))
 

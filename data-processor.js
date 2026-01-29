@@ -56,7 +56,8 @@ function parseCSV(text) {
 async function loadRatingRules() {
     if (ratingRules) return ratingRules;
     try {
-        const response = await fetch('rating_rules.json');
+        // Add cache-busting to ensure fresh data
+        const response = await fetch('rating_rules.json?t=' + Date.now());
         ratingRules = await response.json();
     } catch (e) {
         console.error("Failed to load rating rules", e);
@@ -123,8 +124,149 @@ async function processScoresForDisplay(rawScores) {
         });
     });
 
-    const result = [];
+    // ========== PHASE 1: Calculate base weighted scores for ALL employees ==========
+    // This ensures subordinates' scores are properly weighted before being used
+    // in institution heads' calculations (same fix as server.py)
+    // Uses iterative calculation to handle multi-level dependencies
+    const baseScores = {}; // { employeeName: { cat1: weightedAvg, cat2: weightedAvg, cat3: weightedAvg } }
+
     const allRatees = new Set([...Object.keys(employeeRaters), ...Object.keys(staff)]);
+
+    // Helper function to calculate base score for an employee
+    const calcBaseScoreForEmployee = (employee, useSubRules = true) => {
+        const currentRaters = employeeRaters[employee] || [];
+        const empConfig = employeeConfigs[employee] || {};
+        const myManagers = new Set(empConfig.managers || []);
+        const managerWeight = empConfig.manager_weight !== undefined ? empConfig.manager_weight : 0.5;
+        const subRules = empConfig.subordinate_rules || [];
+        const excludedPeers = new Set(empConfig.excluded_peers || []);
+
+        const calcCategoryScore = (catKey) => {
+            let totalWeighted = 0;
+            let totalWeightUsed = 0;
+
+            // Managers
+            const mgrRaters = currentRaters.filter(r => myManagers.has(r.name));
+            if (mgrRaters.length > 0) {
+                const avg = mgrRaters.reduce((s, r) => s + r[catKey], 0) / mgrRaters.length;
+                totalWeighted += avg * managerWeight;
+                totalWeightUsed += managerWeight;
+            }
+
+            // Subordinate Rules - use baseScores for members
+            if (useSubRules && subRules.length > 0) {
+                subRules.forEach(rule => {
+                    const ruleWeight = rule.weight || 0;
+                    if (ruleWeight <= 0) return;
+
+                    const ruleMembers = rule.members || [];
+                    const subScores = [];
+                    ruleMembers.forEach(member => {
+                        if (baseScores[member]) {
+                            subScores.push(baseScores[member][catKey]);
+                        }
+                    });
+
+                    if (subScores.length > 0) {
+                        const avg = subScores.reduce((s, v) => s + v, 0) / subScores.length;
+                        totalWeighted += avg * ruleWeight;
+                        totalWeightUsed += ruleWeight;
+                    }
+                });
+            } else {
+                // Peers (excluding managers and excluded peers)
+                const peerWeight = Math.max(0, 1.0 - managerWeight);
+                const peerRaters = currentRaters.filter(r => !myManagers.has(r.name) && !excludedPeers.has(r.name));
+                if (peerRaters.length > 0 && peerWeight > 0) {
+                    const avg = peerRaters.reduce((s, r) => s + r[catKey], 0) / peerRaters.length;
+                    totalWeighted += avg * peerWeight;
+                    totalWeightUsed += peerWeight;
+                }
+            }
+
+            // Normalize if not all weights used
+            if (totalWeightUsed > 0 && totalWeightUsed < 1.0) {
+                return totalWeighted / totalWeightUsed;
+            }
+            return totalWeighted;
+        };
+
+        return {
+            cat1: calcCategoryScore('cat1'),
+            cat2: calcCategoryScore('cat2'),
+            cat3: calcCategoryScore('cat3')
+        };
+    };
+
+    // Round 1A: Calculate employees WITHOUT subordinate_rules
+    for (const employee of allRatees) {
+        const empConfig = employeeConfigs[employee] || {};
+        const subRules = empConfig.subordinate_rules || [];
+
+        if (subRules.length === 0) {
+            baseScores[employee] = calcBaseScoreForEmployee(employee, false);
+        }
+    }
+
+    // Round 1B: Iteratively calculate employees WITH subordinate_rules
+    // Process in order of dependencies (employees whose subordinates are already calculated)
+    const employeesWithSubRules = [];
+    for (const employee of allRatees) {
+        const empConfig = employeeConfigs[employee] || {};
+        const subRules = empConfig.subordinate_rules || [];
+        if (subRules.length > 0) {
+            employeesWithSubRules.push(employee);
+        }
+    }
+
+    // Iterative processing - up to 10 rounds to handle multi-level dependencies
+    for (let round = 0; round < 10 && employeesWithSubRules.length > 0; round++) {
+        const remaining = [];
+
+        for (const employee of employeesWithSubRules) {
+            if (baseScores[employee]) continue; // Already processed
+
+            const empConfig = employeeConfigs[employee] || {};
+            const subRules = empConfig.subordinate_rules || [];
+
+            // Check if all subordinate members are in baseScores
+            let allMembersAvailable = true;
+            for (const rule of subRules) {
+                const members = rule.members || [];
+                for (const member of members) {
+                    if (!baseScores[member]) {
+                        allMembersAvailable = false;
+                        break;
+                    }
+                }
+                if (!allMembersAvailable) break;
+            }
+
+            if (allMembersAvailable) {
+                // All dependencies met, calculate this employee
+                baseScores[employee] = calcBaseScoreForEmployee(employee, true);
+            } else {
+                // Dependencies not met, try again next round
+                remaining.push(employee);
+            }
+        }
+
+        // Update the list for next round
+        employeesWithSubRules.length = 0;
+        employeesWithSubRules.push(...remaining);
+
+        // If no progress, break
+        if (remaining.length === employeesWithSubRules.length) break;
+    }
+
+    // Handle any remaining employees (circular dependencies or missing data)
+    for (const employee of employeesWithSubRules) {
+        if (!baseScores[employee]) {
+            baseScores[employee] = calcBaseScoreForEmployee(employee, true);
+        }
+    }
+
+    const result = [];
 
     for (const employee of allRatees) {
         if (!employeeRaters[employee]) {
@@ -187,18 +329,18 @@ async function processScoresForDisplay(rawScores) {
                 breakdown.push({ desc: '主管', weight: Math.round(managerWeight * 100), avg: 0, count: 0, raterDetails: [] });
             }
 
-            // B. Subordinate Rules
+            // B. Subordinate Rules - Use pre-calculated weighted scores from baseScores
             subRules.forEach(rule => {
                 const members = rule.members || [];
                 const mDetails = [];
                 let grpTotal = 0;
 
                 members.forEach(mName => {
-                    const mRaters = employeeRaters[mName];
-                    if (mRaters && mRaters.length > 0) {
-                        const mRawAvg = mRaters.reduce((s, r) => s + r[catKey], 0) / mRaters.length;
-                        grpTotal += mRawAvg;
-                        mDetails.push({ name: mName, score: mRawAvg });
+                    // Use baseScores (weighted) instead of raw rater average
+                    if (baseScores[mName]) {
+                        const mWeightedScore = baseScores[mName][catKey];
+                        grpTotal += mWeightedScore;
+                        mDetails.push({ name: mName, score: mWeightedScore });
                     }
                 });
 

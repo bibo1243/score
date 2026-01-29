@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>機構主管加分管理</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .header h1 {
+            color: #667eea;
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 16px;
+        }
+
+        .table-container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+
+        th:first-child {
+            border-top-left-radius: 10px;
+        }
+
+        th:last-child {
+            border-top-right-radius: 10px;
+        }
+
+        td {
+            padding: 15px;
+            text-align: center;
+            border-bottom: 1px solid #e0e0e0;
+            font-size: 16px;
+            vertical-align: top;
+        }
+
+        tr:hover {
+            background-color: #f8f9ff;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .name-cell {
+            font-weight: 600;
+            color: #667eea;
+            text-align: left;
+            font-size: 18px;
+            vertical-align: middle;
+        }
+
+        .score-cell {
+            color: #333;
+            font-weight: 500;
+            line-height: 1.4;
+        }
+
+        .score-cell .formula-hint {
+            font-size: 11px;
+            color: #999;
+            margin-top: 3px;
+            font-weight: normal;
+        }
+
+        .bonus-input {
+            width: 80px;
+            padding: 8px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+
+        .bonus-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .total-cell {
+            font-weight: 700;
+            color: #764ba2;
+            font-size: 18px;
+        }
+
+        .save-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-left: 10px;
+        }
+
+        .save-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .save-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .status-message {
+            margin-top: 15px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            display: none;
+            font-size: 14px;
+        }
+
+        .status-message.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status-message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .formula-note {
+            background: #f8f9ff;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            border-left: 4px solid #667eea;
+        }
+
+        .formula-note strong {
+            color: #667eea;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 24px;
+            }
+
+            table {
+                font-size: 14px;
+            }
+
+            th,
+            td {
+                padding: 10px 5px;
+            }
+
+            .bonus-input {
+                width: 60px;
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 機構主管加分管理</h1>
+            <p>董事長專用 - 機構主管下半年加分設定</p>
+        </div>
+
+        <div class="table-container">
+            <div id="loading" class="loading">載入中...</div>
+            <div id="tableContent" style="display: none;">
+                <table id="directorTable">
+                    <thead>
+                        <tr>
+                            <th>姓名</th>
+                            <th>上半年總分<br>（已含加分）</th>
+                            <th>下半年總分<br>（未含加分）</th>
+                            <th>下半年加分</th>
+                            <th>總分<br>上半年總分×40% + (下半年總分+加分)×60%</th>
+                        </tr>
+                    </thead>
+                    <tbody id="directorTableBody">
+                    </tbody>
+                </table>
+
+                <div class="formula-note">
+                    <strong>計算公式：</strong> 總分 = 上半年總分 × 40% + (下半年總分 + 下半年加分) × 60%
+                </div>
+
+                <div id="statusMessage" class="status-message"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="supabase-client.js"></script>
+    <script>
+        // 機構主管名單
+        const DIRECTORS = ['廖慧雯', '廖振杉', '李冠葦', '楊顗帆'];
+
+        let directorsData = {};
+
+        // 載入數據
+        async function loadData() {
+            try {
+                // 從 Supabase 載入所有評分數據
+                const scores = await fetchScores();
+
+                // 從 API 獲取下半年總分
+                const apiResponse = await fetch('/api/data');
+                const apiData = await apiResponse.json();
+
+                // 處理每位主管的數據
+                for (const director of DIRECTORS) {
+                    const directorScores = scores.filter(s => s.ratee === director);
+
+                    // 獲取系統加分（H1 上半年總分）
+                    const h1Score = directorScores.find(s => s.rater === '_SYSTEM_H1_');
+                    const h1Total = h1Score ? parseFloat(h1Score.cat1) || 0 : 0;
+
+                    // 獲取系統加分（下半年加分）
+                    const bonusScore = directorScores.find(s => s.rater === '_SYSTEM_BONUS_');
+                    const bonus = bonusScore ? parseFloat(bonusScore.cat1) || 0 : 0;
+
+                    // 計算下半年總分（從 API 獲取）
+                    const directorData = apiData.find(d => d.name === director);
+                    // 使用 average_score (三個大類的整數相加) 而不是 weighted_score
+                    const h2Score = directorData ? directorData.average_score || 0 : 0;
+
+                    // 獲取詳細分數組成
+                    const h2Cat1 = directorData ? directorData.cat1_rounded || 0 : 0;
+                    const h2Cat2 = directorData ? directorData.cat2_rounded || 0 : 0;
+                    const h2Cat3 = directorData ? directorData.cat3_rounded || 0 : 0;
+
+                    directorsData[director] = {
+                        h1: h1Total,
+                        h2: h2Score,
+                        h2Cat1: h2Cat1,
+                        h2Cat2: h2Cat2,
+                        h2Cat3: h2Cat3,
+                        bonus: bonus,
+                        total: calculateTotal(h1Total, h2Score, bonus)
+                    };
+                }
+
+                renderTable();
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('tableContent').style.display = 'block';
+
+            } catch (error) {
+                console.error('載入數據失敗:', error);
+                const loadingDiv = document.getElementById('loading');
+                loadingDiv.innerHTML = '載入失敗: ' + error.message;
+                loadingDiv.style.color = 'red';
+            }
+        }
+
+        // 計算總分
+        function calculateTotal(h1, h2, bonus) {
+            return h1 * 0.4 + (h2 + bonus) * 0.6;
+        }
+
+        // 渲染表格
+        function renderTable() {
+            const tbody = document.getElementById('directorTableBody');
+            tbody.innerHTML = '';
+
+            DIRECTORS.forEach(director => {
+                const data = directorsData[director];
+                const row = document.createElement('tr');
+
+                // 準備計算過程說明
+                const h1Formula = data.h1 > 0 ? `來自上半年評分系統` : '尚未輸入';
+                const h2Formula = data.h2 > 0
+                    ? `第一大類 ${data.h2Cat1} + 第二大類 ${data.h2Cat2} + 第三大類 ${data.h2Cat3} = ${data.h2.toFixed(1)}`
+                    : '尚未計算';
+
+                row.innerHTML = `
+                    <td class="name-cell">${director}</td>
+                    <td class="score-cell" title="${h1Formula}">
+                        <div style="font-size: 18px; font-weight: 600;">${data.h1.toFixed(1)}</div>
+                        <div class="formula-hint">${h1Formula}</div>
+                    </td>
+                    <td class="score-cell" title="${h2Formula}">
+                        <div style="font-size: 18px; font-weight: 600;">${data.h2.toFixed(1)}</div>
+                        <div class="formula-hint">${h2Formula}</div>
+                    </td>
+                    <td>
+                        <input 
+                            type="number" 
+                            class="bonus-input" 
+                            value="${data.bonus}" 
+                            step="1"
+                            min="0"
+                            max="3"
+                            data-director="${director}"
+                            onchange="updateBonus('${director}', this.value)"
+                        >
+                    </td>
+                    <td class="total-cell" id="total-${director}">${data.total.toFixed(1)}</td>
+                `;
+
+                tbody.appendChild(row);
+            });
+        }
+
+        // 更新加分
+        async function updateBonus(director, bonusValue) {
+            const bonus = parseInt(bonusValue) || 0;
+            // 限制在 0-3 之間
+            if (bonus < 0 || bonus > 3) {
+                showMessage('加分必須在 0-3 之間', 'error');
+                return;
+            }
+
+            try {
+                // 先檢查是否已存在
+                const endpoint = `scores?ratee=eq.${encodeURIComponent(director)}&rater=eq._SYSTEM_BONUS_`;
+                const existing = await supabaseRequest(endpoint);
+
+                if (existing && existing.length > 0) {
+                    // 更新現有記錄
+                    await updateScoreInSupabase(director, '_SYSTEM_BONUS_', bonus, 0, 0);
+                } else {
+                    // 新增記錄
+                    await addScoreInSupabase(director, '_SYSTEM_BONUS_', bonus, 0, 0);
+                }
+
+                // 更新本地數據
+                directorsData[director].bonus = bonus;
+                directorsData[director].total = calculateTotal(
+                    directorsData[director].h1,
+                    directorsData[director].h2,
+                    bonus
+                );
+
+                // 更新顯示
+                document.getElementById(`total-${director}`).textContent =
+                    directorsData[director].total.toFixed(1);
+
+                showMessage(`${director} 的加分已更新為 ${bonus}`, 'success');
+
+            } catch (error) {
+                console.error('更新失敗:', error);
+                showMessage('更新失敗: ' + error.message, 'error');
+            }
+        }
+
+        // 顯示訊息
+        function showMessage(message, type) {
+            const messageDiv = document.getElementById('statusMessage');
+            messageDiv.textContent = message;
+            messageDiv.className = `status-message ${type}`;
+            messageDiv.style.display = 'block';
+
+            setTimeout(() => {
+                messageDiv.style.display = 'none';
+            }, 3000);
+        }
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', loadData);
+
+        // 每30秒自動刷新數據
+        setInterval(loadData, 30000);
+    </script>
+</body>
+
+</html>
