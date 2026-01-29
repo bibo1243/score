@@ -339,7 +339,7 @@
                     <i class="fa-solid fa-download"></i> 下載設定檔
                 </button>
                 <button class="btn btn-primary" onclick="saveActiveEmployee()">
-                    <i class="fa-solid fa-save"></i> 暫存設定
+                    <i class="fa-solid fa-save"></i> 儲存設定
                 </button>
             </div>
         </div>
@@ -372,16 +372,101 @@
         let activeEmployeeName = null;
         let allEmployees = [];
         let currentConfig = null;
+        let isLocalServer = false;
+
+        // Supabase Config for Direct Sync
+        const SUPABASE_URL = 'https://acrkclmderqewcwugsnl.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFjcmtjbG1kZXJxZXdjd3Vnc25sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYyNTc0MzAsImV4cCI6MjA4MTgzMzQzMH0.UT2vJTXpPO5tR9sUD8YU0gJ_47Zpe3yJiLzllUljPDw';
+
+        async function supabaseSync(data) {
+            const url = `${SUPABASE_URL}/rest/v1/system_configs?key=eq.rating_rules`;
+            const headers = {
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'resolution=merge-duplicates'
+            };
+
+            return fetch(url, {
+                method: 'PATCH',
+                headers: headers,
+                body: JSON.stringify({ value: data, updated_at: new Date().toISOString() })
+            });
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.style.position = 'fixed';
+            toast.style.top = '20px';
+            toast.style.right = '20px';
+            toast.style.padding = '15px 25px';
+            toast.style.background = type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#4f46e5';
+            toast.style.color = 'white';
+            toast.style.borderRadius = '8px';
+            toast.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
+            toast.style.zIndex = '9999';
+            toast.style.fontWeight = '500';
+            toast.style.transition = 'opacity 0.3s ease';
+            toast.innerHTML = (type === 'success' ? '<i class="fa-solid fa-check-circle"></i> ' : type === 'error' ? '<i class="fa-solid fa-exclamation-triangle"></i> ' : '<i class="fa-solid fa-info-circle"></i> ') + message;
+            document.body.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
 
         // -- Initialization --
         async function init() {
             try {
-                // 1. Load Rules
-                const rulesRes = await fetch('rating_rules.json');
-                ratingRules = await rulesRes.json();
+                // Check if we are on local server
+                isLocalServer = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+                const statusHtml = isLocalServer
+                    ? '<span style="color:#059669; font-size:12px;"><i class="fa-solid fa-circle"></i> 本機連線中 (可自動儲存)</span>'
+                    : '<span style="color:#d97706; font-size:12px;"><i class="fa-solid fa-cloud"></i> 雲端預覽模式 (需手動下載後上傳)</span>';
+                document.getElementById('pageTitle').insertAdjacentHTML('afterend', `<div id="serverStatus" style="margin-left: 20px;">${statusHtml}</div>`);
+
+                // 1. Load Rules (Prefer Supabase if Cloud, else Local File)
+                if (!isLocalServer) {
+                    try {
+                        const url = `${SUPABASE_URL}/rest/v1/system_configs?key=eq.rating_rules&select=value`;
+                        const res = await fetch(url, {
+                            headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` }
+                        });
+                        const cloudData = await res.json();
+                        if (cloudData && cloudData.length > 0) {
+                            ratingRules = cloudData[0].value;
+                            console.log("Loaded rules from Supabase");
+                        } else {
+                            throw new Error("No data in Supabase");
+                        }
+                    } catch (e) {
+                        console.warn("Supabase load failed, falling back to local file", e);
+                        const rulesRes = await fetch(`rating_rules.json?t=${new Date().getTime()}`);
+                        ratingRules = await rulesRes.json();
+                    }
+                } else {
+                    const rulesRes = await fetch(`rating_rules.json?t=${new Date().getTime()}`);
+                    ratingRules = await rulesRes.json();
+                }
+
                 if (!ratingRules.employees) ratingRules.employees = {};
 
-                // 2. Load Employee Data
+                // 2. Check LocalStorage for unsaved changes
+                const cached = localStorage.getItem('pending_rating_rules');
+                if (cached) {
+                    const cachedData = JSON.parse(cached);
+                    // Compare normalized versions to avoid false positives from formatting
+                    const s1 = JSON.stringify(cachedData);
+                    const s2 = JSON.stringify(ratingRules);
+                    if (s1 !== s2) {
+                        if (confirm("偵測到您有未儲存或尚未同步的規則變動，是否要還原？")) {
+                            ratingRules = cachedData;
+                            showToast("已載入瀏覽器快取中的暫存設定", "info");
+                        }
+                    }
+                }
+
+                // 3. Load Employee Data
                 const empRes = await fetch('employee_data.json');
                 employeeData = await empRes.json();
                 allEmployees = employeeData.map(e => e.name);
@@ -389,7 +474,7 @@
                 renderTree();
             } catch (e) {
                 console.error("Failed to init", e);
-                alert("載入資料失敗，請確認 rating_rules.json 和 employee_data.json 存在");
+                showToast("載入資料失敗，請確認檔案是否存在", "error");
             }
         }
 
@@ -408,15 +493,27 @@
                 structure[org][unit].push(e);
             });
 
-            Object.keys(structure).sort().forEach(org => {
-                const orgDiv = createTreeNode(`org-${org}`, org, 'building', true);
+            // Sort logic to match main index
+            const ORG_ORDER = ['基金會', '兒少之家', '少年家園', '諮商所', '未分類', '-'];
+
+            const sortedOrgs = Object.keys(structure).sort((a, b) => {
+                let idxA = ORG_ORDER.indexOf(a);
+                let idxB = ORG_ORDER.indexOf(b);
+                if (idxA === -1) idxA = 99;
+                if (idxB === -1) idxB = 99;
+                return idxA - idxB;
+            });
+
+            sortedOrgs.forEach(org => {
+                const orgId = `org-${org.replace(/\s/g, '')}`;
+                const orgDiv = createTreeNode(orgId, org === '-' || org === '未分類' ? '其他' : org, 'building', true);
                 treeContainer.appendChild(orgDiv);
 
                 const orgChildren = document.createElement('div');
                 orgChildren.style.paddingLeft = '15px';
 
                 Object.keys(structure[org]).sort().forEach(unit => {
-                    const unitDiv = createTreeNode(`unit-${org}-${unit}`, unit, 'sitemap', true);
+                    const unitDiv = createTreeNode(null, unit, 'sitemap', true);
                     orgChildren.appendChild(unitDiv);
 
                     const unitChildren = document.createElement('div');
@@ -424,7 +521,7 @@
 
                     structure[org][unit].forEach(emp => {
                         if (search && !emp.name.toLowerCase().includes(search) && !unit.toLowerCase().includes(search)) return;
-                        const empDiv = createTreeNode(`emp-${emp.name}`, emp.name, 'user', false);
+                        const empDiv = createTreeNode(null, emp.name, 'user', false);
                         empDiv.onclick = () => loadEmployeeEditor(emp.name);
                         unitChildren.appendChild(empDiv);
                     });
@@ -437,6 +534,7 @@
         function createTreeNode(id, text, icon, isFolder) {
             const div = document.createElement('div');
             div.className = 'tree-node';
+            if (id) div.id = id;
             div.innerHTML = `<i class="fa-solid fa-${icon}"></i> ${text}`;
             return div;
         }
@@ -445,7 +543,10 @@
         function loadEmployeeEditor(name) {
             activeEmployeeName = name;
             document.querySelectorAll('.tree-node').forEach(el => el.classList.remove('active'));
-            // Highlight logic omitted for brevity
+            // Try to highlight in tree
+            const nodes = Array.from(document.querySelectorAll('.tree-node'));
+            const activeNode = nodes.find(n => n.innerText.includes(name));
+            if (activeNode) activeNode.classList.add('active');
 
             document.getElementById('pageTitle').innerText = `設定：${name}`;
 
@@ -498,9 +599,13 @@
 
             // Identify Peers (Actual raters minus managers minus subordinates minus excluded)
             const excludedSet = new Set(currentConfig.excluded_peers || []);
-            let peerHtml = '<span style="color:#999; font-size:12px;">(暫無資料)</span>';
+            let peerHtml = '<span style="color:#999; font-size:12px;">(暫無同仁評分資料)</span>';
             let excludedHtml = '';
+
+            // Try to find raters for this employee from employeeData (which we loaded)
             const empData = employeeData.find(e => e.name === activeEmployeeName);
+            // Note: In this management page, employeeData might not have 'raters' list unless data-processor was used server-side.
+            // If it's not there, we show a generic message.
             if (empData && empData.raters) {
                 const allPotentialPeers = empData.raters.filter(r => !mgrSet.has(r.name) && !subMemberSet.has(r.name)).map(r => r.name);
                 const activePeers = allPotentialPeers.filter(p => !excludedSet.has(p));
@@ -508,15 +613,13 @@
 
                 if (activePeers.length > 0) {
                     peerHtml = activePeers.map(p => `<span class="tag" style="background:#f1f5f9; color:#475569; border:1px solid #e2e8f0;">${p} <i class="fa-solid fa-times" style="cursor:pointer; margin-left:4px; color:#94a3b8;" onclick="excludePeer('${p}')"></i></span>`).join('');
-                } else {
-                    peerHtml = '<span style="color:#999; font-size:12px;">(目前無其他同仁評分)</span>';
                 }
 
                 if (excludedPeers.length > 0) {
                     excludedHtml = `
                         <div style="margin-top:8px; padding-top:8px; border-top:1px dashed #e2e8f0;">
                             <div style="font-size:11px; color:#94a3b8; margin-bottom:4px;">已排除 (不計入分數):</div>
-                            <div class="tag-container">
+                            <div class="tag-container" style="background:#fffafa;">
                                 ${excludedPeers.map(p => `<span class="tag" style="background:#fee2e2; color:#991b1b; border:1px solid #fecaca; text-decoration:line-through;">${p} <i class="fa-solid fa-rotate-left" style="cursor:pointer; margin-left:4px; color:#dc2626;" title="還原" onclick="restorePeer('${p}')"></i></span>`).join('')}
                             </div>
                         </div>
@@ -526,13 +629,6 @@
 
             // Render Editor HTML
             panel.innerHTML = `
-                <div class="editor-header">
-                    <h2>設定：${activeEmployeeName}</h2>
-                    <button class="btn btn-outline" onclick="saveActiveEmployee()">
-                        <i class="fa-solid fa-floppy-disk"></i> 暫存設定
-                    </button>
-                </div>
-
                 <div class="editor-panel">
                     <!-- 1. Manager Weight -->
                     <div class="config-card">
@@ -562,9 +658,9 @@
                                 </div>
                             </div>
 
-                            <!-- Detected Peers List -->
+                            <!-- List Indicators -->
                              <div style="margin-top: 12px; border-top: 1px solid #e2e8f0; padding-top: 10px;">
-                                <div style="font-size:12px; font-weight:600; color:#475569; margin-bottom:5px;">📝 包含的同仁名單 (這些人<span style="color:#4f46e5;">打給此員工的分數</span>):</div>
+                                <div style="font-size:12px; font-weight:600; color:#475569; margin-bottom:5px;">📝 同仁評分名單 (影響此同仁互評分數的人):</div>
                                 <div class="tag-container" style="max-height:100px; overflow-y:auto;">
                                     ${peerHtml}
                                 </div>
@@ -582,8 +678,9 @@
                         <div class="tag-container" id="managerTags">
                             ${managersHtml}
                         </div>
-                        <div style="margin-top:5px; font-size:12px; color:#666;">
-                            * 若列表為空，系統將自動依據部門判定主管。若有指定，則僅以此清單為主。
+                        <div style="margin-top:8px; font-size:12px; color:#64748b; display:flex; gap:5px; align-items:center;">
+                            <i class="fa-solid fa-circle-info"></i>
+                            <span>若列表為空，系統將自動依據部門判定主管。若有指定，則僅以此清單為主。</span>
                         </div>
                     </div>
                 
@@ -593,10 +690,9 @@
                             <div class="card-title">📊 下屬績效佔比設定</div>
                             <button class="btn btn-primary" style="font-size:12px;" onclick="addRule()">+ 新增群組</button>
                         </div>
-                        <div style="font-size:12px; color:#64748b; margin-bottom:10px; background:#fef3c7; padding:8px; border-radius:6px; border-left:3px solid #f59e0b;">
-                            <i class="fa-solid fa-info-circle" style="color:#f59e0b;"></i>
-                            此區設定的下屬，其<strong style="color:#b45309;">自身績效分數的平均</strong>會算入主管的總分。
-                            <br>（意即：下屬做得好，主管分數就高）
+                        <div style="font-size:12px; color:#64748b; margin-bottom:10px; background:#eff6ff; padding:8px; border-radius:6px; border-left:4px solid #3b82f6;">
+                            <i class="fa-solid fa-info-circle" style="color:#3b82f6;"></i>
+                            此區設定的下屬，其<strong style="color:#1d4ed8;">自身的績效得分</strong>會依照權重算入主管分數中。
                         </div>
                         <div id="subRuleList"></div>
                     </div>
@@ -611,7 +707,7 @@
             list.innerHTML = '';
 
             if (!currentConfig.subordinate_rules || currentConfig.subordinate_rules.length === 0) {
-                list.innerHTML = '<div style="text-align:center; color:#999; padding:10px;">無下屬績效規則</div>';
+                list.innerHTML = '<div style="text-align:center; color:#999; padding:10px;">尚未設定下屬績效規則</div>';
                 return;
             }
 
@@ -627,13 +723,13 @@
                         <input type="text" class="text-input" style="width:200px; font-weight:bold;" value="${rule.name}" onchange="modifyRuleName(${idx}, this.value)">
                         <div style="display:flex; align-items:center; gap:10px;">
                             <label>權重:</label>
-                            <input type="number" step="0.1" max="1" min="0" value="${rule.weight}" style="width:60px;" onchange="modifyRuleWeight(${idx}, this.value)">
-                            <button style="color:red; border:none; background:none; cursor:pointer;" onclick="deleteRule(${idx})"><i class="fa-solid fa-trash"></i></button>
+                            <input type="number" step="0.01" max="1" min="0" value="${rule.weight}" style="width:70px; padding:4px;" onchange="modifyRuleWeight(${idx}, this.value)">
+                            <button style="color:#ef4444; border:none; background:none; cursor:pointer;" onclick="deleteRule(${idx})" title="刪除群組"><i class="fa-solid fa-trash-can"></i></button>
                         </div>
                     </div>
-                    <div class="tag-container">
+                    <div class="tag-container" style="background:white;">
                         ${membersHtml}
-                        <button class="tag" style="background:#eee; color:#333; cursor:pointer;" onclick="openAddMemberModal(${idx})">+ 加人</button>
+                        <button class="tag" style="background:#f1f5f9; color:#475569; border:1px dashed #cbd5e1; cursor:pointer;" onclick="openAddMemberModal(${idx})">+ 新增成員</button>
                     </div>
                 `;
                 list.appendChild(div);
@@ -707,12 +803,16 @@
         window.saveActiveEmployee = async () => {
             if (!activeEmployeeName || !currentConfig) return;
             ratingRules.employees[activeEmployeeName] = JSON.parse(JSON.stringify(currentConfig));
-            // Sync special_rules just in case
+
+            // 1. Save to LocalStorage first (Browser Cache)
+            localStorage.setItem('pending_rating_rules', JSON.stringify(ratingRules));
+
+            // Sync legacy keys just in case
             if (ratingRules.special_rules && ratingRules.special_rules[activeEmployeeName]) {
-                delete ratingRules.special_rules[activeEmployeeName]; // Remove from legacy if exists to prefer employees key
+                delete ratingRules.special_rules[activeEmployeeName];
             }
 
-            // Attempt to save to server
+            // 2. Attempt to save to server (File-based save)
             try {
                 const response = await fetch('/api/save-rules', {
                     method: 'POST',
@@ -723,28 +823,32 @@
                 if (response.ok) {
                     const result = await response.json();
                     if (result.success) {
-                        // Create a toast or non-blocking notification if possible, but alert is fine for now
-                        const toast = document.createElement('div');
-                        toast.style.position = 'fixed';
-                        toast.style.top = '20px';
-                        toast.style.right = '20px';
-                        toast.style.padding = '15px 25px';
-                        toast.style.background = '#10b981'; // Green
-                        toast.style.color = 'white';
-                        toast.style.borderRadius = '8px';
-                        toast.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
-                        toast.style.zIndex = '9999';
-                        toast.style.fontWeight = '500';
-                        toast.innerHTML = '<i class="fa-solid fa-check"></i> 已成功儲存並套用至伺服器！';
-                        document.body.appendChild(toast);
-                        setTimeout(() => toast.remove(), 3000);
-                        return; // Success, no need to alert
+                        showToast("儲存成功！變動已同步至伺服器檔案。", "success");
+                        localStorage.removeItem('pending_rating_rules'); // Clear sync flag
+                        return;
                     }
                 }
-                throw new Error("Server save failed");
+                throw new Error("Local Server Unavailable");
             } catch (e) {
-                console.warn("Server save failed, falling back to local save message", e);
-                alert("已暫存！無法連接伺服器，請按「下載設定檔」手動更新。");
+                console.warn("Local server save failed, attempting Supabase sync...", e);
+
+                // 3. Cloud Mode: Sync to Supabase directly
+                const pwd = prompt("偵測到非開發環境或伺服器未運行。\n若要直接將規則同步至雲端資料庫，請輸入管理員密碼：");
+                if (pwd === '1243') { // Simple barrier
+                    try {
+                        const res = await supabaseSync(ratingRules);
+                        if (res.ok) {
+                            showToast("雲端同步成功！規則已存入資料庫。", "success");
+                            localStorage.removeItem('pending_rating_rules'); // Clear cache on success
+                        } else {
+                            throw new Error("Supabase Patch Failed");
+                        }
+                    } catch (err) {
+                        showToast("雲端同步失敗，僅存入瀏覽器暫存。", "error");
+                    }
+                } else if (pwd !== null) {
+                    alert("密碼錯誤，無法同步至雲端。");
+                }
             }
         }
 
@@ -756,6 +860,7 @@
             document.body.appendChild(dl);
             dl.click();
             dl.remove();
+            showToast("已準備好設定檔下載", "success");
         }
 
         // Modal Logic

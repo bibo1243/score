@@ -56,10 +56,10 @@
       "manager_weight": 0.5,
       "managers": [
         "廖慧雯",
-        "林品亨",
         "鍾宜珮"
       ],
-      "subordinate_rules": []
+      "subordinate_rules": [],
+      "excluded_peers": []
     },
     "廖慧雯": {
       "manager_weight": 0.5,
@@ -118,18 +118,20 @@
     "梁偉培": {
       "manager_weight": 0.5,
       "managers": [
-        "簡采琦"
+        "廖振杉",
+        "陳宛妤"
       ],
-      "subordinate_rules": []
+      "subordinate_rules": [],
+      "excluded_peers": []
     },
     "王卉蓁": {
       "manager_weight": 0.5,
       "managers": [
         "廖振杉",
-        "簡采琦",
         "陳宛妤"
       ],
-      "subordinate_rules": []
+      "subordinate_rules": [],
+      "excluded_peers": []
     },
     "吳秉熹": {
       "manager_weight": 0.5,
@@ -197,10 +199,10 @@
       "manager_weight": 0.5,
       "managers": [
         "廖振杉",
-        "簡采琦",
         "陳宛妤"
       ],
-      "subordinate_rules": []
+      "subordinate_rules": [],
+      "excluded_peers": []
     },
     "謝秀桃": {
       "manager_weight": 0.5,
@@ -215,19 +217,19 @@
       "manager_weight": 0.5,
       "managers": [
         "廖振杉",
-        "簡采琦",
         "陳宛妤"
       ],
-      "subordinate_rules": []
+      "subordinate_rules": [],
+      "excluded_peers": []
     },
     "廖玟慈": {
       "manager_weight": 0.5,
       "managers": [
         "廖振杉",
-        "簡采琦",
         "陳宛妤"
       ],
-      "subordinate_rules": []
+      "subordinate_rules": [],
+      "excluded_peers": []
     },
     "林港博": {
       "manager_weight": 0.5,
@@ -292,10 +294,10 @@
       "manager_weight": 0.5,
       "managers": [
         "廖振杉",
-        "簡采琦",
         "陳宛妤"
       ],
-      "subordinate_rules": []
+      "subordinate_rules": [],
+      "excluded_peers": []
     },
     "林品亨": {
       "manager_weight": 0.5,
@@ -333,10 +335,10 @@
       "manager_weight": 0.5,
       "managers": [
         "廖振杉",
-        "簡采琦",
         "陳宛妤"
       ],
-      "subordinate_rules": []
+      "subordinate_rules": [],
+      "excluded_peers": []
     },
     "簡采琦": {
       "manager_weight": 0.5,
@@ -374,10 +376,10 @@
       "manager_weight": 0.5,
       "managers": [
         "廖振杉",
-        "簡采琦",
         "陳宛妤"
       ],
-      "subordinate_rules": []
+      "subordinate_rules": [],
+      "excluded_peers": []
     },
     "高靜華": {
       "manager_weight": 1,
@@ -392,19 +394,20 @@
       "manager_weight": 0.5,
       "managers": [
         "廖振杉",
-        "簡采琦",
         "陳宛妤"
       ],
-      "subordinate_rules": []
+      "subordinate_rules": [],
+      "excluded_peers": []
     },
     "吳思函": {
       "manager_weight": 0.5,
       "managers": [
         "廖慧雯",
-        "林品亨",
-        "鍾宜珮"
+        "鍾宜珮",
+        "林品亨"
       ],
-      "subordinate_rules": []
+      "subordinate_rules": [],
+      "excluded_peers": []
     },
     "鍾宜珮": {
       "manager_weight": 0.5,
@@ -495,19 +498,19 @@
       "manager_weight": 0.5,
       "managers": [
         "廖慧雯",
-        "林品亨",
         "鍾宜珮"
       ],
-      "subordinate_rules": []
+      "subordinate_rules": [],
+      "excluded_peers": []
     },
     "賀郁茵": {
       "manager_weight": 0.5,
       "managers": [
         "廖振杉",
-        "簡采琦",
         "陳宛妤"
       ],
-      "subordinate_rules": []
+      "subordinate_rules": [],
+      "excluded_peers": []
     },
     "郭楷欣": {
       "manager_weight": 0.5,
@@ -537,10 +540,12 @@
             "王芊蓉",
             "羅如光",
             "謝秀桃",
-            "陸廷瑋"
+            "陸廷瑋",
+            "熊小蓮"
           ]
         }
-      ]
+      ],
+      "excluded_peers": []
     },
     "陳昱綸": {
       "manager_weight": 0.5,
@@ -584,25 +589,26 @@
             "許芸嘉"
           ]
         }
-      ]
+      ],
+      "excluded_peers": []
     },
     "黃穎蓁": {
       "manager_weight": 0.5,
       "managers": [
         "廖慧雯",
-        "林品亨",
         "鍾宜珮"
       ],
-      "subordinate_rules": []
+      "subordinate_rules": [],
+      "excluded_peers": []
     },
     "蘇盟惠": {
       "manager_weight": 0.5,
       "managers": [
         "廖慧雯",
-        "林品亨",
         "鍾宜珮"
       ],
-      "subordinate_rules": []
+      "subordinate_rules": [],
+      "excluded_peers": []
     }
   }
 }

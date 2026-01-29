@@ -50,6 +50,17 @@ class ScoreHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=BASE_DIR, **kwargs)
     
+    def load_rating_rules(self):
+        rules_path = os.path.join(BASE_DIR, 'rating_rules.json')
+        if os.path.exists(rules_path):
+            try:
+                with open(rules_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"Error loading rating rules properly: {e}")
+                return {}
+        return {}
+
     def do_GET(self):
         parsed_path = urlparse(self.path)
         
@@ -344,6 +355,46 @@ class ScoreHandler(SimpleHTTPRequestHandler):
                 rules_path = os.path.join(BASE_DIR, 'rating_rules.json')
                 with open(rules_path, 'w', encoding='utf-8') as f:
                     json.dump(rules_data, f, ensure_ascii=False, indent=2)
+
+                # Sync to Supabase if enabled
+                if USE_SUPABASE:
+                    try:
+                        # Try to update existing record first
+                        import datetime
+                        payload = {
+                            "value": rules_data,
+                            "updated_at": datetime.datetime.now().isoformat()
+                        }
+                        
+                        # Check if record exists first to decide between POST and PATCH
+                        # actually PATCH with key filter is easiest. 
+                        # If it returns empty, then maybe we need POST, but let's assume existence for 'rating_rules' key
+                        # or we can use upsert if we know the ID, but we only know the key.
+                        
+                        # Let's try PATCH
+                        # endpoint, method='GET', data=None, params=None
+                        resp = supabase_request(
+                            endpoint='system_configs',
+                            method='PATCH',
+                            data=payload,
+                            params={'key': 'eq.rating_rules'}
+                        )
+                        
+                        # If response is empty list [], it means row didn't exist, so we should POST
+                        if resp is not None and len(resp) == 0:
+                            payload['key'] = 'rating_rules'
+                            supabase_request(
+                                endpoint='system_configs',
+                                method='POST',
+                                data=payload
+                            )
+                            print("Inserted new rating_rules to Supabase")
+                        else:
+                            print("Updated rating_rules in Supabase")
+                            
+                    except Exception as e:
+                        print(f"Failed to sync rules to Supabase: {e}")
+                        # We don't fail the request because local save succeeded
                 
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json; charset=utf-8')
@@ -791,7 +842,8 @@ class ScoreHandler(SimpleHTTPRequestHandler):
         employee_scores = defaultdict(list)
         employee_raters = defaultdict(list)
         rater_given_scores = defaultdict(list)  # Track scores GIVEN BY each rater
-        
+        employee_h1_scores = {} # Store H1 scores separately
+
         # Read scores from Supabase or CSV
         if USE_SUPABASE:
             # Fetch all scores from Supabase (exclude soft-deleted)
@@ -800,16 +852,20 @@ class ScoreHandler(SimpleHTTPRequestHandler):
                 for row in result:
                     ratee = row.get('ratee', '').strip()
                     rater = row.get('rater', '').strip()
-                    
-                    # Skip system bonus records
-                    if rater == '_SYSTEM_BONUS_':
-                        continue
-                        
                     cat1 = float(row.get('cat1', 0) or 0)
                     cat2 = float(row.get('cat2', 0) or 0)
                     cat3 = float(row.get('cat3', 0) or 0)
                     total = row.get('total', cat1 + cat2 + cat3)
                     
+                    # 1. Skip system bonus records (handled separately)
+                    if rater == '_SYSTEM_BONUS_':
+                        continue
+                    
+                    # 2. Extract H1 records (do not count as H2 rater)
+                    if rater == '_SYSTEM_H1_':
+                        employee_h1_scores[ratee] = total
+                        continue
+
                     # Get original scores
                     original_cat1 = row.get('original_cat1')
                     original_cat2 = row.get('original_cat2')
@@ -861,6 +917,14 @@ class ScoreHandler(SimpleHTTPRequestHandler):
                         if ratee and total_score_str:
                             try:
                                 score = float(total_score_str)
+                                
+                                # Skip systems
+                                if rater == '_SYSTEM_BONUS_':
+                                    continue
+                                if rater == '_SYSTEM_H1_':
+                                    employee_h1_scores[ratee] = score
+                                    continue
+
                                 employee_scores[ratee].append(score)
                                 employee_raters[ratee].append({
                                     "name": rater,
@@ -1019,6 +1083,142 @@ class ScoreHandler(SimpleHTTPRequestHandler):
             if head not in employee_scores:
                 employee_scores[head] = []  # No scores yet, will be calculated from subordinates
         
+        # ============================================================
+        # TWO-PHASE CALCULATION
+        # Phase 1: Calculate BASE scores for ALL employees (from actual ratings)
+        # Phase 2: Apply subordinate performance for supervisors
+        # ============================================================
+        
+        # Standard rounding to 2 decimal places (四捨五入)
+        from decimal import Decimal, ROUND_HALF_UP
+        def standard_round(value, places=2):
+            """Standard rounding (四捨五入) to specified decimal places."""
+            if value is None:
+                return 0.0
+            d = Decimal(str(value))
+            quantizer = Decimal(10) ** -places  # e.g., 0.01 for places=2
+            return float(d.quantize(quantizer, rounding=ROUND_HALF_UP))
+        
+        rating_rules_data = self.load_rating_rules()
+        
+        # Phase 1: Calculate base scores (simple weighted average from actual raters)
+        base_scores = {}  # Store base scores for each employee: {name: {cat1_avg, cat2_avg, cat3_avg, ...}}
+        
+        for employee, scores in employee_scores.items():
+            current_raters = employee_raters[employee]
+            emp_config = rating_rules_data.get("employees", {}).get(employee, {})
+            manager_weight_setting = emp_config.get("manager_weight", 0.5)
+            my_managers = set(emp_config.get("managers", []))
+            sub_rules = emp_config.get("subordinate_rules", [])
+            excluded_peers = set(emp_config.get("excluded_peers", []))
+            
+            # For phase 1, only use "主管" and "其他同仁" - no subordinate rules yet
+            sub_total_weight = sum(r.get("weight", 0) for r in sub_rules)
+            
+            # If employee has subordinate rules, peer_weight = 0
+            # Otherwise, peer_weight = 1.0 - manager_weight
+            if sub_rules:
+                peer_weight_setting = 0.0
+            else:
+                peer_weight_setting = max(0.0, 1.0 - manager_weight_setting)
+            
+            import math
+            def custom_round(value):
+                first_decimal = int((value * 10) % 10)
+                if first_decimal >= 1:
+                    return math.ceil(value)
+                else:
+                    return math.floor(value)
+            
+            # Collect all subordinate members for proper exclusion
+            all_subordinate_members = set()
+            for rule in sub_rules:
+                all_subordinate_members.update(rule.get("members", []))
+            
+            # Create matchers with frozen sets for closure
+            frozen_managers = frozenset(my_managers)
+            frozen_all_sub = frozenset(all_subordinate_members)
+            frozen_excluded = frozenset(excluded_peers)
+            
+            groups = []
+            # Managers group
+            if manager_weight_setting > 0:
+                groups.append({
+                    "desc": "主管",
+                    "weight": manager_weight_setting,
+                    "matcher": lambda n, mg=frozen_managers: n in mg,
+                })
+            
+            # Peers group (only if no subordinate rules)
+            if peer_weight_setting > 0:
+                groups.append({
+                    "desc": "其他同仁",
+                    "weight": peer_weight_setting,
+                    "matcher": lambda n, mg=frozen_managers, sub=frozen_all_sub, excl=frozen_excluded: \
+                        n not in mg and n not in sub and n not in excl,
+                })
+            
+            # Calculate weighted averages from actual raters
+            total_cat1_weighted = 0
+            total_cat2_weighted = 0
+            total_cat3_weighted = 0
+            total_weight_used = 0
+            
+            for group in groups:
+                weight = group["weight"]
+                matcher = group["matcher"]
+                
+                filtered_raters = [r for r in current_raters if matcher(r['name'])]
+                if len(filtered_raters) > 0:
+                    group_cat1 = sum(r['cat1'] for r in filtered_raters) / len(filtered_raters)
+                    group_cat2 = sum(r['cat2'] for r in filtered_raters) / len(filtered_raters)
+                    group_cat3 = sum(r['cat3'] for r in filtered_raters) / len(filtered_raters)
+                    
+                    total_cat1_weighted += group_cat1 * weight
+                    total_cat2_weighted += group_cat2 * weight
+                    total_cat3_weighted += group_cat3 * weight
+                    total_weight_used += weight
+            
+            # Fallback: simple average if no groups matched
+            all_cat1 = [r['cat1'] for r in current_raters]
+            all_cat2 = [r['cat2'] for r in current_raters]
+            all_cat3 = [r['cat3'] for r in current_raters]
+            
+            simple_cat1_avg = sum(all_cat1) / len(all_cat1) if all_cat1 else 0
+            simple_cat2_avg = sum(all_cat2) / len(all_cat2) if all_cat2 else 0
+            simple_cat3_avg = sum(all_cat3) / len(all_cat3) if all_cat3 else 0
+            
+            if total_weight_used > 0:
+                if total_weight_used < 1.0:
+                    cat1_avg = total_cat1_weighted / total_weight_used
+                    cat2_avg = total_cat2_weighted / total_weight_used
+                    cat3_avg = total_cat3_weighted / total_weight_used
+                else:
+                    cat1_avg = total_cat1_weighted
+                    cat2_avg = total_cat2_weighted
+                    cat3_avg = total_cat3_weighted
+            else:
+                cat1_avg = simple_cat1_avg
+                cat2_avg = simple_cat2_avg
+                cat3_avg = simple_cat3_avg
+            
+            base_scores[employee] = {
+                'cat1_avg': cat1_avg,
+                'cat2_avg': cat2_avg,
+                'cat3_avg': cat3_avg,
+                'simple_cat1_avg': simple_cat1_avg,  # Added
+                'simple_cat2_avg': simple_cat2_avg,  # Added
+                'simple_cat3_avg': simple_cat3_avg,  # Added
+                'cat1_rounded': custom_round(cat1_avg),
+                'cat2_rounded': custom_round(cat2_avg),
+                'cat3_rounded': custom_round(cat3_avg),
+                'has_subordinate_rules': len(sub_rules) > 0,
+                'sub_rules': sub_rules,
+                'manager_weight': manager_weight_setting,
+                'my_managers': my_managers,
+            }
+        
+        # Phase 2: Build final output with subordinate performance applied
         output_data = []
         for employee, scores in sorted(employee_scores.items()):
             current_raters = employee_raters[employee]
@@ -1033,10 +1233,18 @@ class ScoreHandler(SimpleHTTPRequestHandler):
             # --- Dynamic Logic from rating_rules.json ---
             
             # 1. Get Employee Config
-            emp_config = EMPLOYEE_CONFIGS.get(employee, {})
-            my_managers = set(emp_config.get("managers", []))
+            # 1. Get Employee Config
+            # Load config for this employee from rating rules
+            rating_rules_data = self.load_rating_rules()
+            emp_config = rating_rules_data.get("employees", {}).get(employee, {})
+            
             manager_weight_setting = emp_config.get("manager_weight", 0.5)
+            
+            my_managers = set(emp_config.get("managers", []))
             sub_rules = emp_config.get("subordinate_rules", [])
+            excluded_peers = set(emp_config.get("excluded_peers", []))
+
+
             
             # Calculate implied peer weight
             sub_total_weight = sum(r.get("weight", 0) for r in sub_rules)
@@ -1044,7 +1252,7 @@ class ScoreHandler(SimpleHTTPRequestHandler):
             
             # 2. Identify Subordinates (Reverse lookup from rules)
             if not subordinates:
-                for other_name, other_conf in EMPLOYEE_CONFIGS.items():
+                for other_name, other_conf in rating_rules_data.get('employees', {}).items():
                     if employee in other_conf.get("managers", []):
                         subordinates.append(other_name)
                 subordinates = sorted(subordinates)
@@ -1061,6 +1269,7 @@ class ScoreHandler(SimpleHTTPRequestHandler):
                 missing_raters = sorted(missing_raters)
 
             # Helper: Custom rounding
+            # Helper: Custom rounding
             import math
             def custom_round(value):
                 first_decimal = int((value * 10) % 10)
@@ -1068,39 +1277,307 @@ class ScoreHandler(SimpleHTTPRequestHandler):
                     return math.ceil(value)
                 else:
                     return math.floor(value)
+
+            # --- 4. Calculate Scores Groups ---
+            breakdown = []
+            
+            # NEW LOGIC: For supervisors with subordinate_rules, use subordinates' OWN scores
+            # not their ratings of the supervisor
+            
+            groups_to_process = []
+            
+            # Create a frozen copy of my_managers for closure
+            frozen_managers = frozenset(my_managers)
+            
+            # A. Managers - still uses actual ratings FROM managers
+            groups_to_process.append({
+                "desc": "主管",
+                "weight": manager_weight_setting,
+                "type": "rater",  # "rater" = filter current_raters
+                "matcher": lambda n, mg=frozen_managers: n in mg,
+                "members": list(my_managers)
+            })
+            
+            # B. Subordinate Rules (from config) - uses subordinates' OWN SCORES
+            # Collect all subordinate members for exclusion from peers
+            all_subordinate_members = set()
+            for rule in sub_rules:
+                r_members = list(rule.get("members", []))
+                all_subordinate_members.update(r_members)
+                groups_to_process.append({
+                    "desc": rule.get("name", "下屬"),
+                    "weight": rule.get("weight", 0),
+                    "type": "subordinate_performance",  # NEW: use subordinates' own scores
+                    "members": r_members
+                })
+                
+            # C. Peers (Everyone else not matched by above)
+            excluded_peers = set(emp_config.get("excluded_peers", []))
+            
+            # Freeze sets for closure
+            frozen_all_sub = frozenset(all_subordinate_members)
+            frozen_excluded = frozenset(excluded_peers)
+            
+            groups_to_process.append({
+                "desc": "其他同仁",
+                "weight": peer_weight_setting,
+                "type": "rater",
+                "matcher": lambda n, mg=frozen_managers, sub=frozen_all_sub, excl=frozen_excluded: \
+                    n not in mg and n not in sub and n not in excl,
+                "members": []
+            })
+
+            total_weighted_score = 0
+            total_weight_used = 0
+            
+            # Weighted category accumulators
+            total_cat1_weighted = 0
+            total_cat2_weighted = 0
+            total_cat3_weighted = 0
+            
+            # Precise category accumulators (for display)
+            precise_cat1_weighted = 0
+            precise_cat2_weighted = 0
+            precise_cat3_weighted = 0
+            
+            # Simple average accumulators (fallback)
+            simple_cat1_sum = 0
+            simple_cat2_sum = 0
+            simple_cat3_sum = 0
+            
+            category_breakdowns = {'cat1': [], 'cat2': [], 'cat3': []}
+
+            # Track which raters are "special" (Managers)
+            special_raters = set(my_managers)
+
+            for group in groups_to_process:
+                weight = group["weight"]
+                desc = group["desc"]
+                group_type = group.get("type", "rater")
+                expected_members = group.get("members", [])
+                
+                if weight <= 0:
+                    continue
+
+                # Handle different group types
+                if group_type == "subordinate_performance":
+                    # NEW: Use subordinates' OWN scores from base_scores
+                    sub_cat1_scores = []
+                    sub_cat2_scores = []
+                    sub_cat3_scores = []
+                    rater_details_cat1 = []
+                    rater_details_cat2 = []
+                    rater_details_cat3 = []
                     
-                    if filtered_count > 0:
-                        # Calculate each category average for this group
-                        group_cat1 = sum(r['cat1'] for r in filtered_raters) / filtered_count
-                        group_cat2 = sum(r['cat2'] for r in filtered_raters) / filtered_count
-                        group_cat3 = sum(r['cat3'] for r in filtered_raters) / filtered_count
+                    for member in expected_members:
+                        if member in base_scores:
+                            member_scores = base_scores[member]
+                            # Use SIMPLE average for subordinate performance component
+                            s1 = member_scores.get('simple_cat1_avg', member_scores['cat1_avg'])
+                            s2 = member_scores.get('simple_cat2_avg', member_scores['cat2_avg'])
+                            s3 = member_scores.get('simple_cat3_avg', member_scores['cat3_avg'])
+                            
+                            sub_cat1_scores.append(s1)
+                            sub_cat2_scores.append(s2)
+                            sub_cat3_scores.append(s3)
+                            rater_details_cat1.append({"name": member, "score": s1})
+                            rater_details_cat2.append({"name": member, "score": s2})
+                            rater_details_cat3.append({"name": member, "score": s3})
+                        else:
+                            # Member has no scores yet
+                            rater_details_cat1.append({"name": member, "score": "未評"})
+                            rater_details_cat2.append({"name": member, "score": "未評"})
+                            rater_details_cat3.append({"name": member, "score": "未評"})
+                    
+                    if len(sub_cat1_scores) > 0:
+                        group_cat1 = sum(sub_cat1_scores) / len(sub_cat1_scores)
+                        group_cat2 = sum(sub_cat2_scores) / len(sub_cat2_scores)
+                        group_cat3 = sum(sub_cat3_scores) / len(sub_cat3_scores)
                         
-                        # Apply rounding to each category
                         group_cat1_rounded = custom_round(group_cat1)
                         group_cat2_rounded = custom_round(group_cat2)
                         group_cat3_rounded = custom_round(group_cat3)
                         
-                        # Sum of rounded categories for this group
                         group_rounded_total = group_cat1_rounded + group_cat2_rounded + group_cat3_rounded
                         
                         total_weighted_score += group_rounded_total * weight
+                        total_cat1_weighted += group_cat1_rounded * weight
+                        total_cat2_weighted += group_cat2_rounded * weight
+                        total_cat3_weighted += group_cat3_rounded * weight
+                        
+                        precise_cat1_weighted += group_cat1 * weight
+                        precise_cat2_weighted += group_cat2 * weight
+                        precise_cat3_weighted += group_cat3 * weight
+                        
                         total_weight_used += weight
+                        
                         breakdown.append({
                             "desc": desc,
                             "weight": int(weight * 100),
-                            "avg": group_rounded_total,  # Now showing rounded sum
+                            "avg": group_rounded_total,
+                            "count": len(sub_cat1_scores),
+                            "raters": [m for m in expected_members if m in base_scores]
+                        })
+                        
+                        category_breakdowns['cat1'].append({
+                            "desc": desc, "weight": int(weight * 100), "avg": standard_round(group_cat1),
+                            "rounded": group_cat1_rounded, "count": len(sub_cat1_scores), "raterDetails": rater_details_cat1
+                        })
+                        category_breakdowns['cat2'].append({
+                            "desc": desc, "weight": int(weight * 100), "avg": standard_round(group_cat2),
+                            "rounded": group_cat2_rounded, "count": len(sub_cat2_scores), "raterDetails": rater_details_cat2
+                        })
+                        category_breakdowns['cat3'].append({
+                            "desc": desc, "weight": int(weight * 100), "avg": standard_round(group_cat3),
+                            "rounded": group_cat3_rounded, "count": len(sub_cat3_scores), "raterDetails": rater_details_cat3
+                        })
+                    else:
+                        # No subordinates with scores
+                        breakdown.append({
+                            "desc": desc,
+                            "weight": int(weight * 100),
+                            "avg": 0,
+                            "count": 0,
+                            "raters": expected_members
+                        })
+                        empty_detail = {
+                            "desc": desc, "weight": int(weight * 100), "avg": 0,
+                            "rounded": 0, "count": 0, "raterDetails": rater_details_cat1
+                        }
+                        category_breakdowns['cat1'].append(empty_detail)
+                        category_breakdowns['cat2'].append({"desc": desc, "weight": int(weight * 100), "avg": 0, "rounded": 0, "count": 0, "raterDetails": rater_details_cat2})
+                        category_breakdowns['cat3'].append({"desc": desc, "weight": int(weight * 100), "avg": 0, "rounded": 0, "count": 0, "raterDetails": rater_details_cat3})
+                
+                else:
+                    # "rater" type: Filter current_raters (original logic)
+                    matcher = group.get("matcher", lambda n: False)
+                    filtered_raters = [r for r in current_raters if matcher(r['name'])]
+                    filtered_count = len(filtered_raters)
+                    filtered_names = [r['name'] for r in filtered_raters]
+                    
+                    if filtered_count > 0:
+                        group_cat1 = sum(r['cat1'] for r in filtered_raters) / filtered_count
+                        group_cat2 = sum(r['cat2'] for r in filtered_raters) / filtered_count
+                        group_cat3 = sum(r['cat3'] for r in filtered_raters) / filtered_count
+                        
+                        group_cat1_rounded = custom_round(group_cat1)
+                        group_cat2_rounded = custom_round(group_cat2)
+                        group_cat3_rounded = custom_round(group_cat3)
+                        
+                        group_rounded_total = group_cat1_rounded + group_cat2_rounded + group_cat3_rounded
+                        
+                        total_weighted_score += group_rounded_total * weight
+                        total_cat1_weighted += group_cat1_rounded * weight
+                        total_cat2_weighted += group_cat2_rounded * weight
+                        total_cat3_weighted += group_cat3_rounded * weight
+                        
+                        precise_cat1_weighted += group_cat1 * weight
+                        precise_cat2_weighted += group_cat2 * weight
+                        precise_cat3_weighted += group_cat3 * weight
+                        
+                        total_weight_used += weight
+                        
+                        breakdown.append({
+                            "desc": desc,
+                            "weight": int(weight * 100),
+                            "avg": group_rounded_total,
                             "count": filtered_count,
                             "raters": filtered_names
                         })
+                        
+                        cat1_raters = [{"name": r['name'], "score": r['cat1']} for r in filtered_raters]
+                        cat2_raters = [{"name": r['name'], "score": r['cat2']} for r in filtered_raters]
+                        cat3_raters = [{"name": r['name'], "score": r['cat3']} for r in filtered_raters]
+                        
+                        category_breakdowns['cat1'].append({
+                            "desc": desc, "weight": int(weight * 100), "avg": standard_round(group_cat1), 
+                            "rounded": group_cat1_rounded, "count": filtered_count, "raterDetails": cat1_raters
+                        })
+                        category_breakdowns['cat2'].append({
+                            "desc": desc, "weight": int(weight * 100), "avg": standard_round(group_cat2),
+                             "rounded": group_cat2_rounded, "count": filtered_count, "raterDetails": cat2_raters
+                        })
+                        category_breakdowns['cat3'].append({
+                            "desc": desc, "weight": int(weight * 100), "avg": standard_round(group_cat3),
+                             "rounded": group_cat3_rounded, "count": filtered_count, "raterDetails": cat3_raters
+                        })
+                    else:
+                        # No raters in this group
+                        unrated_details = [{"name": m, "score": "未評"} for m in expected_members]
+                        
+                        breakdown.append({
+                            "desc": desc,
+                            "weight": int(weight * 100),
+                            "avg": 0,
+                            "count": 0,
+                            "raters": expected_members
+                        })
+                        
+                        empty_detail = {
+                            "desc": desc, "weight": int(weight * 100), "avg": 0, 
+                            "rounded": 0, "count": 0, "raterDetails": unrated_details
+                        }
+                        category_breakdowns['cat1'].append(empty_detail)
+                        category_breakdowns['cat2'].append(empty_detail)
+                        category_breakdowns['cat3'].append(empty_detail)
+
+            # Fallback for simple average (if no groups processed or unweighted)
+            all_cat1 = [r['cat1'] for r in current_raters]
+            all_cat2 = [r['cat2'] for r in current_raters]
+            all_cat3 = [r['cat3'] for r in current_raters]
             
+            simple_cat1_avg = sum(all_cat1) / len(all_cat1) if all_cat1 else 0
+            simple_cat2_avg = sum(all_cat2) / len(all_cat2) if all_cat2 else 0
+            simple_cat3_avg = sum(all_cat3) / len(all_cat3) if all_cat3 else 0
+
             if total_weight_used > 0 and total_weight_used < 1.0:
+                # Normalize if weights don't sum to 1
                 final_score = total_weighted_score / total_weight_used
-            elif total_weight_used > 0:
+                cat1_final = total_cat1_weighted / total_weight_used
+                cat2_final = total_cat2_weighted / total_weight_used
+                cat3_final = total_cat3_weighted / total_weight_used
+                
+                cat1_precise = precise_cat1_weighted / total_weight_used
+                cat2_precise = precise_cat2_weighted / total_weight_used
+                cat3_precise = precise_cat3_weighted / total_weight_used
+            elif total_weight_used >= 1.0:
                 final_score = total_weighted_score
+                cat1_final = total_cat1_weighted
+                cat2_final = total_cat2_weighted
+                cat3_final = total_cat3_weighted
+                
+                cat1_precise = precise_cat1_weighted
+                cat2_precise = precise_cat2_weighted
+                cat3_precise = precise_cat3_weighted
             else:
+                # Fallback: Simple Average
                 final_score = sum(scores) / len(scores) if scores else 0
+                cat1_final = simple_cat1_avg
+                cat2_final = simple_cat2_avg
+                cat3_final = simple_cat3_avg
+                
+                cat1_precise = simple_cat1_avg
+                cat2_precise = simple_cat2_avg
+                cat3_precise = simple_cat3_avg
             
-            is_weighted = len(breakdown) > 1 or (len(breakdown) == 1 and breakdown[0]['weight'] < 100)
+            # Prepare Final Rounded Values (based on PRECISE values for consistency)
+            # Use precise values to match what user sees in the display
+            cat1_rounded = custom_round(cat1_precise)
+            cat2_rounded = custom_round(cat2_precise)
+            cat3_rounded = custom_round(cat3_precise)
+            
+            # Prepare Float Averages (for display)
+            # Use PRECISE weighted values for display, to match user expectation (35.48 not 36.00)
+            if total_weight_used > 0:
+                cat1_avg = cat1_precise
+                cat2_avg = cat2_precise
+                cat3_avg = cat3_precise
+            else:
+                cat1_avg = simple_cat1_avg
+                cat2_avg = simple_cat2_avg
+                cat3_avg = simple_cat3_avg
+
+            is_weighted = len(breakdown) > 0
             
             # Get employee's section for determining who their managers are
             employee_section = meta.get('section', '')
@@ -1108,13 +1585,15 @@ class ScoreHandler(SimpleHTTPRequestHandler):
             processed_raters = []
             for r in current_raters:
                 r_copy = r.copy()
-                # Use section-aware manager check
-                r_copy['is_special'] = is_manager_for_employee(r['name'], employee_section)
+                # Use dynamic manager check from rules
+                r_copy['is_special'] = r['name'] in my_managers
                 processed_raters.append(r_copy)
+            
+
             
             # Total score = sum of rounded category scores (integer)
             total_rounded = cat1_rounded + cat2_rounded + cat3_rounded
-            
+
             output_data.append({
                 "name": employee,
                 "org": meta['org'],
@@ -1124,18 +1603,20 @@ class ScoreHandler(SimpleHTTPRequestHandler):
                 "title": meta.get('title', ''),
                 "average_score": total_rounded,  # Now using integer sum of rounded categories
                 "weighted_score": float(f"{final_score:.2f}"),  # Keep weighted score for reference
-                "cat1_avg": float(f"{cat1_avg:.2f}"),
-                "cat2_avg": float(f"{cat2_avg:.2f}"),
-                "cat3_avg": float(f"{cat3_avg:.2f}"),
+                "cat1_avg": standard_round(cat1_avg),
+                "cat2_avg": standard_round(cat2_avg),
+                "cat3_avg": standard_round(cat3_avg),
                 "cat1_rounded": cat1_rounded,
                 "cat2_rounded": cat2_rounded,
                 "cat3_rounded": cat3_rounded,
+                "h1_score": employee_h1_scores.get(employee, 0), # Pass H1 score
                 "rater_count": len(scores),
                 "raters": processed_raters,
                 "missing_raters": missing_raters,
                 "subordinates": subordinates,
                 "is_weighted": is_weighted,
-                "breakdown": breakdown
+                "breakdown": breakdown,
+                "breakdowns": category_breakdowns
             })
         
         return output_data

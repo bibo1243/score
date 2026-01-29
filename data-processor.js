@@ -23,10 +23,11 @@ async function loadStaffMeta() {
         const rows = parseCSV(text); // Assumes generic CSV parser available or we implement simple one
         staffMeta = {};
         rows.forEach(row => {
-            if (row['姓名']) {
-                staffMeta[row['姓名']] = {
-                    org: row['機構'] || '未分類',
-                    unit: row['組別'] || '',
+            const name = row['員工姓名'] || row['姓名']; // Fallback
+            if (name) {
+                staffMeta[name] = {
+                    org: row['所屬機構'] || row['機構'] || '未分類',
+                    unit: row['所屬單位'] || row['組別'] || '',
                     section: row['股別'] || '',
                     supervisor: row['直屬主管'] || '',
                     position: row['職稱'] || ''
@@ -87,6 +88,8 @@ async function processScoresForDisplay(rawScores) {
         });
     });
 
+    const h1Scores = {}; // Store system H1 scores
+
     // Process Raw Scores
     rawScores.forEach(row => {
         const ratee = row.ratee;
@@ -98,7 +101,8 @@ async function processScoresForDisplay(rawScores) {
             return;
         }
         if (row.rater === '_SYSTEM_H1_') {
-            // H1 score is distinct, strictly for display in self-assessment
+            // H1 score is distinct, strictly for display in self-assessment & annual calc
+            h1Scores[ratee] = parseFloat(row.cat1) || 0;
             return;
         }
 
@@ -167,14 +171,6 @@ async function processScoresForDisplay(rawScores) {
             const breakdown = [];
 
             // A. Managers
-            currentRaters.forEach(r => {
-                if (myManagers.has(r.name)) {
-                    r.is_special = true;
-                } else {
-                    r.is_special = false;
-                }
-            });
-
             const myMgrRaters = currentRaters.filter(r => myManagers.has(r.name));
             if (myMgrRaters.length > 0) {
                 const avg = myMgrRaters.reduce((s, r) => s + r[catKey], 0) / myMgrRaters.length;
@@ -185,40 +181,40 @@ async function processScoresForDisplay(rawScores) {
                     weight: Math.round(managerWeight * 100),
                     avg: avg,
                     count: myMgrRaters.length,
-                    raters: myMgrRaters.map(r => r.name)
+                    raterDetails: myMgrRaters.map(r => ({ name: r.name, score: r[catKey] }))
                 });
             } else if (managerWeight > 0) {
-                breakdown.push({ desc: '主管', weight: Math.round(managerWeight * 100), avg: 0, count: 0, raters: [] });
+                breakdown.push({ desc: '主管', weight: Math.round(managerWeight * 100), avg: 0, count: 0, raterDetails: [] });
             }
 
             // B. Subordinate Rules
             subRules.forEach(rule => {
                 const members = rule.members || [];
-                const mScores = [];
-                const foundMembers = [];
+                const mDetails = [];
+                let grpTotal = 0;
 
                 members.forEach(mName => {
                     const mRaters = employeeRaters[mName];
                     if (mRaters && mRaters.length > 0) {
                         const mRawAvg = mRaters.reduce((s, r) => s + r[catKey], 0) / mRaters.length;
-                        mScores.push(mRawAvg);
-                        foundMembers.push(mName);
+                        grpTotal += mRawAvg;
+                        mDetails.push({ name: mName, score: mRawAvg });
                     }
                 });
 
-                if (mScores.length > 0) {
-                    const grpAvg = mScores.reduce((a, b) => a + b, 0) / mScores.length;
+                if (mDetails.length > 0) {
+                    const grpAvg = grpTotal / mDetails.length;
                     totalWeighted += grpAvg * rule.weight;
                     totalWeightUsed += rule.weight;
                     breakdown.push({
                         desc: rule.name,
                         weight: Math.round(rule.weight * 100),
                         avg: grpAvg,
-                        count: mScores.length,
-                        raters: foundMembers
+                        count: mDetails.length,
+                        raterDetails: mDetails
                     });
                 } else {
-                    breakdown.push({ desc: rule.name, weight: Math.round(rule.weight * 100), avg: 0, count: 0, raters: [] });
+                    breakdown.push({ desc: rule.name, weight: Math.round(rule.weight * 100), avg: 0, count: 0, raterDetails: [] });
                 }
             });
 
@@ -233,10 +229,10 @@ async function processScoresForDisplay(rawScores) {
                     weight: Math.round(peerWeight * 100),
                     avg: avg,
                     count: myPeerRaters.length,
-                    raters: myPeerRaters.map(r => r.name)
+                    raterDetails: myPeerRaters.map(r => ({ name: r.name, score: r[catKey] }))
                 });
             } else if (peerWeight > 0) {
-                breakdown.push({ desc: '其他同仁', weight: Math.round(peerWeight * 100), avg: 0, count: 0, raters: [] });
+                breakdown.push({ desc: '其他同仁', weight: Math.round(peerWeight * 100), avg: 0, count: 0, raterDetails: [] });
             }
 
             return { score: totalWeighted, breakdown: breakdown };
@@ -271,7 +267,13 @@ async function processScoresForDisplay(rawScores) {
             raters: currentRaters,
             missing_raters: missingRaters,
             subordinates: mySubordinates,
-            breakdown: c1.breakdown, // Use Cat1 as sample
+            breakdown: c1.breakdown, // Keep for backward compatibility
+            breakdowns: {
+                cat1: c1.breakdown,
+                cat2: c2.breakdown,
+                cat3: c3.breakdown
+            },
+            h1_score: h1Scores[employee] || 0,
             is_weighted: true
         });
     }

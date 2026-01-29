@@ -572,6 +572,7 @@
             }
         }
     </style>
+    <script src="auth.js"></script>
 </head>
 
 <body>
@@ -735,6 +736,7 @@
     </div>
 
     <script src="supabase-client.js"></script>
+    <script src="data-processor.js"></script>
     <script>
         // Organization order
         const ORG_ORDER = ['基金會', '兒少之家', '少年家園', '諮商所'];
@@ -745,488 +747,136 @@
             '諮商所': 'counsel'
         };
 
-        async function loadData() {
+        async function loadData(isAuto = false) {
             try {
-                const response = await fetch('/api/data');
-                const data = await response.json();
-                renderOrgTables(data);
+                const processed = await loadProcessedData();
+                if (!isAuto || !document.querySelector('.score-table')) {
+                    renderOrgTables(processed);
+                } else {
+                    updateDisplay(processed);
+                }
+                console.log(`Data synced at ${new Date().toLocaleTimeString()}`);
             } catch (err) {
-                // Try Supabase directly
-                console.log('Using Supabase directly...');
-                const scores = await fetchScores();
-                const processed = await processLocalData(scores);
-                renderOrgTables(processed);
+                console.error("Error loading data:", err);
+                if (!isAuto) {
+                    document.getElementById('org-tables').innerHTML = `<div class="loading" style="color:red">載入失敗: ${err.message}</div>`;
+                }
             }
         }
 
-        async function processLocalData(rawScores) {
-            // Load staff meta first
-            const staffMeta = await loadStaffMeta();
+        function updateDisplay(data) {
+            data.forEach(emp => {
+                const safeName = emp.name.replace(/\s/g, '');
+                const h1 = emp.h1_score || 0;
+                const h2 = emp.final_score || 0;
+                const annualScore = h1 * 0.4 + h2 * 0.6;
+                const annual = annualScore.toFixed(1);
+                // Custom Rounding: .0 stays, .1+ goes up. Using a small epsilon to avoid precision issues.
+                const annualInteger = Math.ceil(parseFloat(annualScore.toFixed(4)));
 
-            // Define managers
-            const MANAGERS = new Set(['廖振杉', '廖慧雯', '李冠葦', '陳淑錡', '楊顗帆', '高靜華', '陳宛妤', '鍾宜珮']);
-            const SUPERVISORS = new Set(['簡采琦', '林品亨', '林紀騰']);
-            const ALL_MANAGERS = new Set([...MANAGERS, ...SUPERVISORS]);
+                // Update basic metrics
+                const cells = {
+                    [`cat1-rounded-${safeName}`]: emp.cat1_rounded,
+                    [`cat1-avg-${safeName}`]: `(${emp.cat1_avg?.toFixed(2) || '0.00'})`,
+                    [`cat2-rounded-${safeName}`]: emp.cat2_rounded,
+                    [`cat2-avg-${safeName}`]: `(${emp.cat2_avg?.toFixed(2) || '0.00'})`,
+                    [`cat3-rounded-${safeName}`]: emp.cat3_rounded,
+                    [`cat3-avg-${safeName}`]: `(${emp.cat3_avg?.toFixed(2) || '0.00'})`,
+                    [`total-${safeName}`]: emp.final_score,
+                    [`bonus-info-${safeName}`]: `(原: ${emp.average_score} + 加: ${emp.bonus})`,
+                    [`formula-${safeName}`]: `${emp.cat1_avg?.toFixed(2) || '0.00'}→${emp.cat1_rounded} + ${emp.cat2_avg?.toFixed(2) || '0.00'}→${emp.cat2_rounded} + ${emp.cat3_avg?.toFixed(2) || '0.00'}→${emp.cat3_rounded} = ${emp.average_score}`,
+                    [`h1-score-${safeName}`]: h1,
+                    [`annual-score-${safeName}`]: annual,
+                    [`annual-formula-${safeName}`]: `${h1}*0.4 + ${h2}*0.6 = ${annual}`,
+                    [`annual-integer-${safeName}`]: annualInteger
+                };
 
-            // Supervisor sections mapping
-            const SUPERVISOR_SECTIONS = {
-                '簡采琦': '社工股',
-                '林品亨': '生輔股',
-                '林紀騰': '庶務股'
-            };
-
-            // Special employee rules - defines who counts as "manager" for specific employees
-            const SPECIAL_EMPLOYEE_MANAGERS = {
-                '王姿斐': new Set(['李冠葦']),
-                '高靜華': new Set(['李冠葦', '廖振杉', '廖慧雯']),
-                '陳宛妤': MANAGERS,
-                '鍾宜珮': MANAGERS,
-                '簡采琦': MANAGERS,
-                '林品亨': MANAGERS,
-                '林紀騰': MANAGERS,
-                '陳淑錡': MANAGERS,
-                '李冠葦': new Set(['董事長']),
-                '廖振杉': new Set(['董事長']),
-                '廖慧雯': new Set(['董事長']),
-                '楊顗帆': new Set(['董事長']),
-            };
-
-            // Special supervisor rules - use subordinate employee PERFORMANCE averages
-            // Format: employeeName -> { ruleDesc: { members: [list], label: 'display label', weight: 0.0 } }
-            const SPECIAL_SUPERVISOR_RULES = {
-                // 教保組長: 50% 主管評分 + 50% 組內同仁績效平均
-                '陳宛妤': {
-                    '組內同仁績效': {
-                        members: ['簡采琦', '林東美', '賀郁茵', '梁偉培', '廖玟慈', '張宜芳', '蕭婷予', '王卉蓁', '陳亮寧', '曾婷婷', '李炎輝', '許芸嘉'],
-                        label: '兒少之家教保組員工績效平均',
-                        weight: 0.5
-                    }
-                },
-                '鍾宜珮': {
-                    '組內同仁績效': {
-                        members: ['林品亨', '胡少淇', '郭楷欣', '吳秉熹', '蔣郡哲', '劉婷瑜', '黃穎蓁', '吳思函', '蘇盟惠', '劉宛宣', '黃歆藝', '陳昱綸'],
-                        label: '少年家園教保組員工績效平均',
-                        weight: 0.5
-                    }
-                },
-                // 行政副組長: 50% 主管評分 + 50% 行政組同仁績效平均
-                '陳淑錡': {
-                    '組內同仁績效': {
-                        members: ['劉春燕', '徐銘澤', '林港博', '林紀騰', '林麗娟', '王元鼎', '王芊蓉', '羅如光', '謝秀桃', '陸廷瑋'],
-                        label: '行政組員工績效平均',
-                        weight: 0.5
-                    }
-                },
-                // 社工股督導: 50% 主管評分 + 40% 該股同仁績效平均 + 10% 其他組內員工績效平均
-                '簡采琦': {
-                    '該股同仁績效': {
-                        members: ['曾婷婷'],
-                        label: '社工股員績效平均',
-                        weight: 0.4
-                    },
-                    '其他組內員工績效': {
-                        members: ['林東美', '賀郁茵', '梁偉培', '廖玟慈', '張宜芳', '蕭婷予', '王卉蓁', '陳亮寧', '李炎輝', '許芸嘉'],
-                        label: '保育股員績效平均',
-                        weight: 0.1
-                    }
-                },
-                // 生輔股督導: 50% 主管評分 + 40% 該股同仁績效平均 + 10% 其他組內員工績效平均
-                '林品亨': {
-                    '該股同仁績效': {
-                        members: ['胡少淇', '郭楷欣', '吳秉熹', '蔣郡哲', '劉婷瑜', '黃穎蓁', '吳思函'],
-                        label: '生輔股員績效平均',
-                        weight: 0.4
-                    },
-                    '其他組內員工績效': {
-                        members: ['蘇盟惠', '劉宛宣', '黃歆藝'],
-                        label: '社工心輔股員績效平均',
-                        weight: 0.1
-                    }
-                },
-                // 行政組股長: 50% 主管評分 + 30% 該股同仁績效平均 + 20% 其他組內員工評股長的分數平均
-                '林紀騰': {
-                    '該股同仁績效': {
-                        members: ['林港博', '謝秀桃', '徐銘澤', '羅如光'],
-                        label: '庶務股員績效平均',
-                        weight: 0.3
-                    },
-                    // 20% 使用評分，不是績效 (useRatings: true)
-                    '其他組內員工評分': {
-                        useRatings: true,  // Use ratings TO this employee, not their performance
-                        filter: (raterName) => {
-                            const m = staffMeta[raterName] || {};
-                            return m.unit === '行政組' &&
-                                !['庶務股'].includes(m.section || '') &&
-                                !MANAGERS.has(raterName);
-                        },
-                        label: '行政組其他組員評分平均',
-                        weight: 0.2
-                    }
-                },
-                // 機構首長: 50% 董事長評分 + 50% 機構員工績效平均
-                '李冠葦': {
-                    '機構員工績效': {
-                        members: ['劉春燕', '徐銘澤', '林港博', '林紀騰', '林麗娟', '王元鼎', '王芊蓉', '羅如光', '謝秀桃', '陳淑錡', '陸廷瑋'],
-                        label: '行政組員工績效平均',
-                        weight: 0.5
-                    }
-                },
-                '廖振杉': {
-                    '機構員工績效': {
-                        members: ['熊小蓮', '簡采琦', '廖玟慈', '張宜芳', '曾婷婷', '李炎輝', '林東美', '梁偉培', '王卉蓁', '蕭婷予', '許芸嘉', '賀郁茵', '陳亮寧', '陳宛妤'],
-                        label: '兒少之家員工績效平均',
-                        weight: 0.5
-                    }
-                },
-                '廖慧雯': {
-                    '機構員工績效': {
-                        members: ['劉婷瑜', '劉宛宣', '吳思函', '吳秉熹', '林品亨', '胡少淇', '蔣郡哲', '蘇盟惠', '郭楷欣', '鍾宜珮', '陳昱綸', '黃歆藝', '黃穎蓁'],
-                        label: '少年家園員工績效平均',
-                        weight: 0.5
-                    }
-                },
-                '楊顗帆': {
-                    '機構員工績效': {
-                        members: ['林彥秀', '陳柔安'],
-                        label: '諮商所員工績效平均',
-                        weight: 0.5
+                for (const [id, val] of Object.entries(cells)) {
+                    const el = document.getElementById(id);
+                    if (el && el.textContent != val) {
+                        el.textContent = val;
+                        // Visual feedback for update
+                        el.style.backgroundColor = '#fef3c7';
+                        setTimeout(() => el.style.backgroundColor = 'transparent', 2000);
                     }
                 }
-            };
 
-            // Helper functions
-            function getRaterMeta(raterName) {
-                return staffMeta[raterName] || { org: '', unit: '', section: '' };
-            }
-
-            function isInOrg(raterName, targetOrg) {
-                return getRaterMeta(raterName).org === targetOrg;
-            }
-
-            function isInUnit(raterName, targetUnit) {
-                return getRaterMeta(raterName).unit === targetUnit;
-            }
-
-            function isInSection(raterName, targetSection) {
-                const section = getRaterMeta(raterName).section || '';
-                if (['保育股', '保育/生輔股', '生輔股'].includes(targetSection)) {
-                    return ['保育股', '保育/生輔股', '生輔股'].includes(section);
-                }
-                return section === targetSection;
-            }
-
-            function getUnitManagers(unit) {
-                switch (unit) {
-                    case '社資組':
-                        return new Set(['李冠葦']);
-                    case '行政組':
-                        return new Set(['李冠葦', '陳淑錡', '林紀騰']);
-                    case '教保組':
-                        return MANAGERS;
-                    default:
-                        return MANAGERS;
-                }
-            }
-
-            function isManagerForEmployee(raterName, employeeName, employeeSection, employeeUnit) {
-                if (SPECIAL_EMPLOYEE_MANAGERS[employeeName]) {
-                    return SPECIAL_EMPLOYEE_MANAGERS[employeeName].has(raterName);
-                }
-                const unitManagers = getUnitManagers(employeeUnit);
-                if (unitManagers.has(raterName)) return true;
-                if (MANAGERS.has(raterName)) return true;
-                if (SUPERVISORS.has(raterName)) {
-                    const supervisorSection = SUPERVISOR_SECTIONS[raterName] || '';
-                    if (['保育股', '保育/生輔股', '生輔股'].includes(supervisorSection)) {
-                        return ['保育股', '保育/生輔股', '生輔股'].includes(employeeSection);
-                    }
-                    return supervisorSection === employeeSection;
-                }
-                return false;
-            }
-
-            // Collect all ratings per employee
-            const employees = {};
-            rawScores.forEach(row => {
-                const ratee = row.ratee;
-                if (!ratee) return;
-
-                // Filter out System Raters
-                if (row.rater === '_SYSTEM_BONUS_' || row.rater === '_SYSTEM_H1_') {
-                    return;
+                // Update expanded detail section (breakdowns)
+                const detailRow = document.getElementById(`detail-${safeName}`);
+                if (detailRow && emp.breakdowns) {
+                    updateDetailContent(detailRow, emp);
                 }
 
-                if (!employees[ratee]) {
-                    employees[ratee] = {
-                        name: ratee,
-                        raters: []
-                    };
-                }
-
-                employees[ratee].raters.push({
-                    name: row.rater,
-                    cat1: parseFloat(row.cat1) || 0,
-                    cat2: parseFloat(row.cat2) || 0,
-                    cat3: parseFloat(row.cat3) || 0
-                });
-            });
-
-            // Ensure Institution Heads are included (even if they have no ratings)
-            const INSTITUTION_HEADS_LIST = ['李冠葦', '廖振杉', '廖慧雯', '楊顗帆'];
-            INSTITUTION_HEADS_LIST.forEach(name => {
-                if (!employees[name]) {
-                    employees[name] = {
-                        name: name,
-                        raters: [] // No ratings, but will use special rules if defined
-                    };
+                if (isAutoRefresh) {
+                    setTimeout(fetchScores, 5000);
                 }
             });
+        }
 
-            // First pass: calculate simple averages for all employees (needed for performance-based rules)
-            const employeeScores = {};
-            for (const [name, data] of Object.entries(employees)) {
-                const raters = data.raters;
-                if (raters.length > 0) {
-                    const cat1Avg = raters.reduce((s, r) => s + r.cat1, 0) / raters.length;
-                    const cat2Avg = raters.reduce((s, r) => s + r.cat2, 0) / raters.length;
-                    const cat3Avg = raters.reduce((s, r) => s + r.cat3, 0) / raters.length;
-                    const cat1Rounded = customRound(cat1Avg);
-                    const cat2Rounded = customRound(cat2Avg);
-                    const cat3Rounded = customRound(cat3Avg);
-                    employeeScores[name] = {
-                        cat1_avg: cat1Avg,
-                        cat2_avg: cat2Avg,
-                        cat3_avg: cat3Avg,
-                        cat1_rounded: cat1Rounded,
-                        cat2_rounded: cat2Rounded,
-                        cat3_rounded: cat3Rounded,
-                        total: cat1Rounded + cat2Rounded + cat3Rounded
-                    };
-                }
-            }
+        // Function to update the detail content for real-time sync
+        function updateDetailContent(detailRow, emp) {
+            const detailContent = detailRow.querySelector('.detail-content');
+            if (!detailContent) return;
 
-            // Second pass: calculate weighted averages with special rules
-            const result = [];
-            for (const [name, data] of Object.entries(employees)) {
-                const meta = staffMeta[name] || { org: '未分類', unit: '', section: '' };
-                const employeeSection = meta.section || '';
-                const employeeUnit = meta.unit || '';
-                const raters = data.raters;
+            const colors = [
+                { bg: '#dbeafe', text: '#1e40af', icon: '👔' },
+                { bg: '#fef3c7', text: '#92400e', icon: '👥' },
+                { bg: '#dcfce7', text: '#166534', icon: '📉' },
+                { bg: '#f3e8ff', text: '#6b21a8', icon: '🎯' }
+            ];
 
-                // Separate raters into managers and colleagues
-                const managerRaters = [];
-                const colleagueRaters = [];
+            let html = '';
+            ['cat1', 'cat2', 'cat3'].forEach(catKey => {
+                const label = catKey === 'cat1' ? '第一大類' : catKey === 'cat2' ? '第二大類' : '第三大類';
+                const avg = emp[`${catKey}_avg`]?.toFixed(2) || '0.00';
+                const rounded = emp[`${catKey}_rounded`] || 0;
+                const breakdown = emp.breakdowns ? emp.breakdowns[catKey] : [];
 
-                raters.forEach(r => {
-                    if (isManagerForEmployee(r.name, name, employeeSection, employeeUnit)) {
-                        managerRaters.push(r);
-                    } else {
-                        colleagueRaters.push(r);
-                    }
-                });
-
-                // Check if this employee has special supervisor rules
-                const specialRules = SPECIAL_SUPERVISOR_RULES[name];
-
-                // Calculate weighted averages for each category
-                function calcWeightedCatAvg(catKey) {
-                    let totalWeighted = 0;
-                    let totalWeight = 0;
-
-                    // Manager component (always 50% for special employees)
-                    if (managerRaters.length > 0) {
-                        const sum = managerRaters.reduce((s, r) => s + r[catKey], 0);
-                        const avg = sum / managerRaters.length;
-                        totalWeighted += avg * 0.5;
-                        totalWeight += 0.5;
-                    }
-
-                    // Special rules for supervisors/managers
-                    if (specialRules) {
-                        for (const [ruleKey, rule] of Object.entries(specialRules)) {
-                            if (rule.useRatings) {
-                                // Use ratings TO this employee from filtered raters
-                                const filtered = raters.filter(r => rule.filter(r.name));
-                                if (filtered.length > 0) {
-                                    const avg = filtered.reduce((s, r) => s + r[catKey], 0) / filtered.length;
-                                    totalWeighted += avg * rule.weight;
-                                    totalWeight += rule.weight;
-                                }
-                            } else if (rule.members) {
-                                // Use subordinate employees' performance averages
-                                const memberCats = [];
-                                for (const m of rule.members) {
-                                    if (employeeScores[m]) {
-                                        memberCats.push(employeeScores[m][catKey.replace('cat', 'cat') + '_avg']);
-                                    }
-                                }
-                                if (memberCats.length > 0) {
-                                    const avg = memberCats.reduce((s, v) => s + v, 0) / memberCats.length;
-                                    totalWeighted += avg * rule.weight;
-                                    totalWeight += rule.weight;
-                                }
-                            }
+                html += `
+                    <div class="category-detail">
+                        <h4>📊 ${label} (加權平均 ${avg})</h4>
+                        ${breakdown.map((group, gIdx) => {
+                    const color = colors[gIdx % colors.length];
+                    return `
+                                <div style="margin-bottom: 12px;">
+                                    <div style="background: ${color.bg}; padding: 6px 10px; border-radius: 6px; font-weight: 600; color: ${color.text}; margin-bottom: 6px; display: flex; justify-content: space-between;">
+                                        <span>${color.icon} ${group.desc} (${group.weight}%)</span>
+                                        <span>平均: ${typeof group.avg === 'number' ? group.avg.toFixed(2) : '0.00'}</span>
+                                    </div>
+                                    <div class="rater-list">
+                                        ${group.raterDetails && group.raterDetails.length > 0
+                            ? group.raterDetails.map(rd => `
+                                                <div class="rater-item">
+                                                    <span class="rater-name">${rd.name}</span>
+                                                    <span class="rater-score">${typeof rd.score === 'number' ? rd.score.toFixed(1) : `<span style="font-size:0.8em; color:#999;">${rd.score}</span>`}</span>
+                                                </div>
+                                            `).join('')
+                            : `<div style="padding: 4px 10px; color: #94a3b8; font-style: italic;">無資料</div>`
                         }
-                    } else {
-                        // Regular employee: 50% colleague ratings
-                        if (colleagueRaters.length > 0) {
-                            const sum = colleagueRaters.reduce((s, r) => s + r[catKey], 0);
-                            const avg = sum / colleagueRaters.length;
-                            totalWeighted += avg * 0.5;
-                            totalWeight += 0.5;
-                        }
-                    }
+                                    </div>
+                                </div>
+                            `;
+                }).join('')}
+                        <div class="score-summary" style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e2e8f0; font-size: 0.9rem;">
+                            <strong>計算結論：</strong> 加權平均 ${avg} → <strong>${rounded}</strong>
+                        </div>
+                    </div>
+                `;
+            });
 
-                    // Normalize if total weight < 1.0
-                    if (totalWeight > 0 && totalWeight < 1.0) {
-                        return totalWeighted / totalWeight;
-                    } else if (totalWeight > 0) {
-                        return totalWeighted;
-                    }
-                    return 0;
-                }
+            // Compare and update if changed
+            const newContent = html.replace(/\s+/g, ' ').trim();
+            const oldContent = detailContent.innerHTML.replace(/\s+/g, ' ').trim();
 
-                const cat1Avg = calcWeightedCatAvg('cat1');
-                const cat2Avg = calcWeightedCatAvg('cat2');
-                const cat3Avg = calcWeightedCatAvg('cat3');
-
-                const cat1Rounded = customRound(cat1Avg);
-                const cat2Rounded = customRound(cat2Avg);
-                const cat3Rounded = customRound(cat3Avg);
-
-                // Prepare breakdown for display
-                let breakdown = [];
-                if (specialRules) {
-                    if (managerRaters.length > 0) {
-                        breakdown.push({
-                            label: '主管評分',
-                            weight: 50,
-                            raters: managerRaters.map(r => r.name)
-                        });
-                    }
-                    for (const [ruleKey, rule] of Object.entries(specialRules)) {
-                        if (rule.useRatings) {
-                            const filtered = raters.filter(r => rule.filter(r.name));
-                            breakdown.push({
-                                label: rule.label,
-                                weight: Math.round(rule.weight * 100),
-                                raters: filtered.map(r => r.name),
-                                isRatings: true
-                            });
-                        } else {
-                            breakdown.push({
-                                label: rule.label,
-                                weight: Math.round(rule.weight * 100),
-                                members: rule.members,
-                                isPerformance: true
-                            });
-                        }
-                    }
-                }
-
-                // Add weighted info to raters for display
-                const ratersWithRole = raters.map(r => ({
-                    ...r,
-                    isManager: isManagerForEmployee(r.name, name, employeeSection, employeeUnit)
-                }));
-
-                result.push({
-                    name: name,
-                    org: meta.org || '未分類',
-                    unit: meta.unit || '',
-                    section: meta.section || '',
-                    role: meta.role || '',
-                    title: meta.title || '',
-                    cat1_avg: cat1Avg,
-                    cat2_avg: cat2Avg,
-                    cat3_avg: cat3Avg,
-                    cat1_rounded: cat1Rounded,
-                    cat2_rounded: cat2Rounded,
-                    cat3_rounded: cat3Rounded,
-                    average_score: cat1Rounded + cat2Rounded + cat3Rounded,
-                    rater_count: raters.length,
-                    raters: ratersWithRole,
-                    managerRaters: managerRaters,
-                    colleagueRaters: colleagueRaters,
-                    hasSpecialRules: !!specialRules,
-                    breakdown: breakdown
-                });
-            }
-
-            return result;
-        }
-
-        async function loadStaffMeta() {
-            try {
-                const response = await fetch('工作人員名冊.csv');
-                const text = await response.text();
-                return parseStaffCSV(text);
-            } catch (e) {
-                return {};
+            if (newContent !== oldContent) {
+                detailContent.innerHTML = html;
+                // Visual feedback for update
+                detailContent.style.backgroundColor = '#fef3c7';
+                setTimeout(() => detailContent.style.backgroundColor = 'transparent', 2000);
             }
         }
 
-        function parseStaffCSV(csvText) {
-            const lines = csvText.split('\n');
-            if (lines.length < 2) return {};
-            const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-            const meta = {};
-
-            for (let i = 1; i < lines.length; i++) {
-                const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
-                if (values.length < headers.length) continue;
-                const row = {};
-                headers.forEach((h, idx) => row[h] = values[idx] || '');
-                const name = row['員工姓名'];
-                if (name) {
-                    let org = row['所屬機構'] || '';
-                    let unit = row['所屬單位'] || '';
-                    const section = row['股別'] || '';
-
-                    // Normalize Organization
-                    // 1. Explicit mapping for Institution Heads
-                    if (name === '李冠葦') org = '基金會';
-                    else if (name === '熊小蓮') {
-                        org = '基金會';
-                        unit = '行政組';
-                    }
-                    else if (name === '廖振杉') org = '兒少之家';
-                    else if (name === '廖慧雯') org = '少年家園';
-                    else if (name === '楊顗帆') org = '諮商所';
-
-                    // 2. Rule-based mapping
-                    else if (['行政組', '社資組', '人資公關組', '圖書組', '會計室'].includes(unit)) {
-                        org = '基金會';
-                    } else if (org.includes('基金會')) {
-                        org = '基金會';
-                    } else if (org.includes('兒少') || unit === '兒少之家') {
-                        org = '兒少之家';
-                    } else if (org.includes('少年') || unit === '少年家園') {
-                        org = '少年家園';
-                    } else if (org.includes('諮商')) {
-                        org = '諮商所';
-                    }
-
-                    meta[name] = {
-                        org,
-                        unit,
-                        section,
-                        role: row['考核標準'] || '',
-                        title: row['職稱'] || ''
-                    };
-                }
-            }
-            return meta;
-        }
-
-        function customRound(value) {
-            const firstDecimal = Math.floor((value * 10) % 10);
-            if (firstDecimal >= 1) {
-                return Math.ceil(value);
-            } else {
-                return Math.floor(value);
-            }
-        }
+        let isAutoRefresh = true;
 
         function renderOrgTables(data) {
             const container = document.getElementById('org-tables');
@@ -1236,27 +886,41 @@
             ORG_ORDER.forEach(org => orgData[org] = []);
 
             data.forEach(emp => {
+                // Force Core Management Classification for Consistency
+                if (emp.name === '簡采琦') emp.org = '兒少之家';
+                if (emp.name === '廖振杉') emp.org = '兒少之家';
+                if (emp.name === '廖慧雯') emp.org = '少年家園';
+
                 const org = emp.org || '未分類';
                 if (!orgData[org]) orgData[org] = [];
                 orgData[org].push(emp);
             });
 
-            // Priority Helper for Sorting and Styling
-            const INST_HEADS = ['李冠葦', '廖振杉', '廖慧雯', '楊顗帆'];
+            // Priority Helper - 5 levels: 機構主管(1), 單位主管(2), 督導(3), 股長(4), 一般員工(5)
             function getPriority(emp) {
-                if (INST_HEADS.includes(emp.name)) return 1; // 機構主管
-                if (emp.role === '主管') return 2; // 單位主管 (Role="主管")
-                if (emp.title && emp.title.includes('督導')) return 3; // 督導
-                return 4; // 其他
+                const INST_HEADS = ['李冠葦', '廖振杉', '廖慧雯', '楊顗帆'];
+                const UNIT_HEADS = ['陳宛妤', '鍾宜珮', '林品亨', '簡采琦'];
+                const SUPERVISORS = ['熊小蓮', '白梅芳', '林彥秀']; // 督導
+                const SECTION_CHIEFS = ['李鳳翎', '王姿斐', '劉春燕', '王卉蓁']; // 股長
+
+                if (INST_HEADS.includes(emp.name)) return 1;
+                if (UNIT_HEADS.includes(emp.name)) return 2;
+                if (SUPERVISORS.includes(emp.name)) return 3;
+                if (SECTION_CHIEFS.includes(emp.name)) return 4;
+                return 5; // 一般員工
             }
 
-            // Sort each org by Priority, then Score descending
+            // Sort each org: primary by role priority, secondary by annual total score (descending)
             for (const org in orgData) {
                 orgData[org].sort((a, b) => {
                     const pA = getPriority(a);
                     const pB = getPriority(b);
                     if (pA !== pB) return pA - pB;
-                    return b.average_score - a.average_score;
+
+                    // Secondary: annual total score (h1 * 0.4 + h2 * 0.6), descending
+                    const annualA = (a.h1_score || 0) * 0.4 + (a.final_score || 0) * 0.6;
+                    const annualB = (b.h1_score || 0) * 0.4 + (b.final_score || 0) * 0.6;
+                    return annualB - annualA;
                 });
             }
 
@@ -1276,7 +940,7 @@
                     </div>
                     <div class="stat-card">
                         <div class="stat-value">${avgScore}</div>
-                        <div class="stat-label">平均分數</div>
+                        <div class="stat-label">下半年平均</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-value">${Object.keys(orgData).filter(k => orgData[k].length > 0).length}</div>
@@ -1286,20 +950,35 @@
             `;
 
             // Render each org
+            const renderedOrgs = new Set();
+
+            // Render predefined orgs first
             ORG_ORDER.forEach(org => {
+                renderOrgSection(org);
+                renderedOrgs.add(org);
+            });
+
+            // Render remaining orgs that have data
+            Object.keys(orgData).forEach(org => {
+                if (!renderedOrgs.has(org) && orgData[org].length > 0) {
+                    renderOrgSection(org);
+                }
+            });
+
+            function renderOrgSection(org) {
                 const employees = orgData[org];
                 if (!employees || employees.length === 0) return;
 
-                const badgeClass = ORG_BADGES[org] || '';
-                const orgAvg = (employees.reduce((s, e) => s + e.average_score, 0) / employees.length).toFixed(1);
+                const badgeClass = ORG_BADGES[org] || 'foundation';
+                const orgAvg = (employees.reduce((s, e) => s + (parseFloat(e.average_score) || 0), 0) / employees.length).toFixed(1);
 
                 html += `
                     <section class="org-section">
                         <div class="org-header">
                             <h2>
-                                <span class="org-badge ${badgeClass}">${org}</span>
+                                <span class="org-badge ${badgeClass}">${org === '-' || org === '未分類' ? '其他' : org}</span>
                                 <span style="margin-left: 10px; font-size: 0.9rem; color: var(--text-secondary);">
-                                    ${employees.length} 人 | 平均 ${orgAvg} 分
+                                    ${employees.length} 人 | 下半年平均 ${orgAvg} 分
                                 </span>
                             </h2>
                         </div>
@@ -1307,35 +986,40 @@
                             <thead>
                                 <tr>
                                     <th style="width: 40px;"></th>
-                                    <th style="width: 50px;">排名</th>
                                     <th style="text-align: left;">姓名</th>
-                                    <th>評分人數</th>
-                                    <th>第一大類<br><small>(滿分40)</small></th>
-                                    <th>第二大類<br><small>(滿分30)</small></th>
-                                    <th>第三大類<br><small>(滿分30)</small></th>
-                                    <th>總分</th>
-                                    <th style="text-align: left;">計算式</th>
+                                    <th>第一大類</th>
+                                    <th>第二大類</th>
+                                    <th>第三大類</th>
+                                    <th>下半年總分</th>
+                                    <th style="text-align: left;">加權計算式</th>
+                                    <th>上半年總分</th>
+                                    <th style="text-align: left;">全年總分與算式</th>
+                                    <th style="text-align: center; background: #fff5f5; color: #b91c1c;">年度總分</th>
                                 </tr>
                             </thead>
                             <tbody>
                 `;
 
                 employees.forEach((emp, idx) => {
-                    const rowId = `row-${org.replace(/\s/g, '')}-${idx}`;
+                    const safeName = emp.name.replace(/\s/g, '');
+                    const rowId = `row-${org.replace(/[^\w\u4e00-\u9fa5]/g, '')}-${idx}`;
                     const cat1Avg = emp.cat1_avg ? emp.cat1_avg.toFixed(2) : '0.00';
                     const cat2Avg = emp.cat2_avg ? emp.cat2_avg.toFixed(2) : '0.00';
                     const cat3Avg = emp.cat3_avg ? emp.cat3_avg.toFixed(2) : '0.00';
 
-                    const formula = `${cat1Avg}→${emp.cat1_rounded} + ${cat2Avg}→${emp.cat2_rounded} + ${cat3Avg}→${emp.cat3_rounded} = ${emp.average_score}`;
+                    const h1 = emp.h1_score || 0;
+                    const h2 = emp.final_score || 0;
+                    const annualScore = h1 * 0.4 + h2 * 0.6;
+                    const annual = annualScore.toFixed(1);
+                    const annualInteger = Math.ceil(parseFloat(annualScore.toFixed(4)));
 
-                    // Build rater details for each category
-                    const raters = emp.raters || [];
+                    const formula = `${cat1Avg}→${emp.cat1_rounded} + ${cat2Avg}→${emp.cat2_rounded} + ${cat3Avg}→${emp.cat3_rounded} = ${emp.average_score}`;
+                    const annualFormula = `${h1}*0.4 + ${h2}*0.6 = ${annual}`;
 
                     let roleClass = '';
                     const p = getPriority(emp);
                     if (p === 1) roleClass = 'role-inst-head';
                     else if (p === 2) roleClass = 'role-unit-head';
-                    else if (p === 3) roleClass = 'role-supervisor';
 
                     html += `
                         <tr class="main-row ${roleClass}" data-row-id="${rowId}">
@@ -1344,215 +1028,82 @@
                                     ▶
                                 </button>
                             </td>
-                            <td>${idx + 1}</td>
                             <td class="name-col">${emp.name}</td>
-                            <td>${emp.rater_count || 0}</td>
                             <td>
-                                <div style="font-size: 1.1rem; font-weight: 600;">${emp.cat1_rounded}</div>
-                                <div style="font-size: 0.75rem; color: var(--text-secondary);">(${cat1Avg})</div>
+                                <div id="cat1-rounded-${safeName}" style="font-size: 1.1rem; font-weight: 600;">${emp.cat1_rounded}</div>
+                                <div id="cat1-avg-${safeName}" style="font-size: 0.75rem; color: var(--text-secondary);">(${cat1Avg})</div>
                             </td>
                             <td>
-                                <div style="font-size: 1.1rem; font-weight: 600;">${emp.cat2_rounded}</div>
-                                <div style="font-size: 0.75rem; color: var(--text-secondary);">(${cat2Avg})</div>
+                                <div id="cat2-rounded-${safeName}" style="font-size: 1.1rem; font-weight: 600;">${emp.cat2_rounded}</div>
+                                <div id="cat2-avg-${safeName}" style="font-size: 0.75rem; color: var(--text-secondary);">(${cat2Avg})</div>
                             </td>
                             <td>
-                                <div style="font-size: 1.1rem; font-weight: 600;">${emp.cat3_rounded}</div>
-                                <div style="font-size: 0.75rem; color: var(--text-secondary);">(${cat3Avg})</div>
+                                <div id="cat3-rounded-${safeName}" style="font-size: 1.1rem; font-weight: 600;">${emp.cat3_rounded}</div>
+                                <div id="cat3-avg-${safeName}" style="font-size: 0.75rem; color: var(--text-secondary);">(${cat3Avg})</div>
                             </td>
-                            <td class="total-score">${emp.average_score}</td>
-                            <td class="formula-col">${formula}</td>
+                            <td class="total-score">
+                                <div id="total-${safeName}" style="font-size: 1.1rem; font-weight: 700;">${emp.final_score}</div>
+                                <div id="bonus-info-${safeName}" style="font-size: 0.75rem; color: var(--text-secondary); white-space: nowrap;">
+                                    (原: ${emp.average_score} + 加: ${emp.bonus})
+                                </div>
+                            </td>
+                            <td id="formula-${safeName}" class="formula-col" style="font-size: 0.85rem;">${formula}</td>
+                            <td id="h1-score-${safeName}" style="font-weight: 600; color: #1e40af;">${h1}</td>
+                            <td class="formula-col" style="min-width: 180px;">
+                                <div id="annual-score-${safeName}" style="font-size: 1.1rem; font-weight: 700; color: #166534;">${annual}</div>
+                                <div id="annual-formula-${safeName}" style="font-size: 0.75rem; color: var(--text-secondary);">${annualFormula}</div>
+                            </td>
+                            <td id="annual-integer-${safeName}" style="font-size: 1.4rem; font-weight: 800; color: #b91c1c; text-align: center; background: #fffafb;">
+                                ${annualInteger}
+                            </td>
                         </tr>
-                        <tr class="detail-row" id="${rowId}">
-                            <td colspan="9">
+                        <tr class="detail-row" id="detail-${safeName}" data-row-id="${rowId}">
+                            <td colspan="10">
                                 <div class="detail-content">
-                    `;
+                                    ${['cat1', 'cat2', 'cat3'].map(catKey => {
+                        const label = catKey === 'cat1' ? '第一大類' : catKey === 'cat2' ? '第二大類' : '第三大類';
+                        const avg = emp[`${catKey}_avg`]?.toFixed(2) || '0.00';
+                        const rounded = emp[`${catKey}_rounded`] || 0;
+                        const breakdown = emp.breakdowns ? emp.breakdowns[catKey] : [];
 
-                    // Helper to generate category detail with weighted breakdown
-                    function renderCategoryDetail(catKey, catLabel, catAvg, catRounded) {
-                        const managerRaters = emp.managerRaters || [];
-                        const colleagueRaters = emp.colleagueRaters || [];
-                        const breakdown = emp.breakdown || [];
-                        const hasSpecialRules = emp.hasSpecialRules;
+                        return `
+                                            <div class="category-detail">
+                                                <h4>📊 ${label} (加權平均 ${avg})</h4>
+                                                ${breakdown.map((group, gIdx) => {
+                            const colors = [
+                                { bg: '#dbeafe', text: '#1e40af', icon: '👔' }, // Manager
+                                { bg: '#fef3c7', text: '#92400e', icon: '👥' }, // Peers
+                                { bg: '#dcfce7', text: '#166534', icon: '📉' }, // Subordinates
+                                { bg: '#f3e8ff', text: '#6b21a8', icon: '🎯' }
+                            ];
+                            const color = colors[gIdx % colors.length];
 
-                        // Calculate averages for each group
-                        const managerSum = managerRaters.reduce((s, r) => s + r[catKey], 0);
-                        const managerAvgVal = managerRaters.length > 0 ? (managerSum / managerRaters.length).toFixed(2) : '-';
-
-                        const colleagueSum = colleagueRaters.reduce((s, r) => s + r[catKey], 0);
-                        const colleagueAvgVal = colleagueRaters.length > 0 ? (colleagueSum / colleagueRaters.length).toFixed(2) : '-';
-
-                        let detailHtml = `
-                            <div class="category-detail">
-                                <h4>📊 ${catLabel} (加權平均 ${catAvg})</h4>
-                        `;
-
-                        if (hasSpecialRules && breakdown.length > 0) {
-                            // Special employee: show breakdown with custom weights
-                            breakdown.forEach((item, idx) => {
-                                const colors = [
-                                    { bg: '#dbeafe', text: '#1e40af', icon: '👔' }, // Manager
-                                    { bg: '#dcfce7', text: '#166534', icon: '📈' }, // Performance 1
-                                    { bg: '#fef3c7', text: '#92400e', icon: '📊' }, // Performance 2 or Ratings
-                                    { bg: '#f3e8ff', text: '#6b21a8', icon: '🎯' }  // Additional
-                                ];
-                                const color = colors[idx % colors.length];
-
-                                if (item.label === '主管評分') {
-                                    // Manager ratings section
-                                    detailHtml += `
-                                        <div style="margin-bottom: 12px;">
-                                            <div style="background: ${color.bg}; padding: 6px 10px; border-radius: 6px; font-weight: 600; color: ${color.text}; margin-bottom: 6px;">
-                                                ${color.icon} ${item.label} (${item.weight}%) - 平均: ${managerAvgVal}
-                                            </div>
-                                            <div class="rater-list">
-                                    `;
-                                    if (managerRaters.length > 0) {
-                                        managerRaters.forEach(r => {
-                                            detailHtml += `
-                                                <div class="rater-item">
-                                                    <span class="rater-name">${r.name}</span>
-                                                    <span class="rater-score">${r[catKey]}</span>
-                                                </div>
-                                            `;
-                                        });
-                                    } else {
-                                        detailHtml += `<div style="color: var(--text-secondary); font-size: 0.85rem;">無主管評分</div>`;
-                                    }
-                                    detailHtml += `</div></div>`;
-                                } else if (item.isPerformance) {
-                                    // Performance-based: show member names and note it's based on their scores
-                                    detailHtml += `
-                                        <div style="margin-bottom: 12px;">
-                                            <div style="background: ${color.bg}; padding: 6px 10px; border-radius: 6px; font-weight: 600; color: ${color.text}; margin-bottom: 6px;">
-                                                ${color.icon} ${item.label} (${item.weight}%)
-                                            </div>
-                                            <div class="rater-list" style="font-size: 0.85rem; color: var(--text-secondary);">
-                                                <div style="margin-bottom: 4px; font-style: italic;">使用下列員工的績效平均：</div>
-                                    `;
-                                    if (item.members && item.members.length > 0) {
-                                        item.members.forEach(m => {
-                                            detailHtml += `
-                                                <div class="rater-item">
-                                                    <span class="rater-name">${m}</span>
-                                                    <span style="font-size: 0.8rem; color: #888;">績效</span>
-                                                </div>
-                                            `;
-                                        });
-                                    }
-                                    detailHtml += `</div></div>`;
-                                } else if (item.isRatings) {
-                                    // Rating-based: show actual raters and their scores
-                                    const itemRaters = (emp.raters || []).filter(r => item.raters && item.raters.includes(r.name));
-                                    const ratingSum = itemRaters.reduce((s, r) => s + r[catKey], 0);
-                                    const ratingAvg = itemRaters.length > 0 ? (ratingSum / itemRaters.length).toFixed(2) : '-';
-
-                                    detailHtml += `
-                                        <div style="margin-bottom: 12px;">
-                                            <div style="background: ${color.bg}; padding: 6px 10px; border-radius: 6px; font-weight: 600; color: ${color.text}; margin-bottom: 6px;">
-                                                ${color.icon} ${item.label} (${item.weight}%) - 平均: ${ratingAvg}
-                                            </div>
-                                            <div class="rater-list">
-                                    `;
-                                    if (itemRaters.length > 0) {
-                                        itemRaters.forEach(r => {
-                                            detailHtml += `
-                                                <div class="rater-item">
-                                                    <span class="rater-name">${r.name}</span>
-                                                    <span class="rater-score">${r[catKey]}</span>
-                                                </div>
-                                            `;
-                                        });
-                                    } else {
-                                        detailHtml += `<div style="color: var(--text-secondary); font-size: 0.85rem;">無符合條件的評分</div>`;
-                                    }
-                                    detailHtml += `</div></div>`;
+                            return `
+                                                        <div style="margin-bottom: 12px;">
+                                                            <div style="background: ${color.bg}; padding: 6px 10px; border-radius: 6px; font-weight: 600; color: ${color.text}; margin-bottom: 6px; display: flex; justify-content: space-between;">
+                                                                <span>${color.icon} ${group.desc} (${group.weight}%)</span>
+                                                                <span>平均: ${group.avg.toFixed(2)}</span>
+                                                            </div>
+                                                            <div class="rater-list">
+                                                                ${group.raterDetails && group.raterDetails.length > 0
+                                    ? group.raterDetails.map(rd => `
+                                                                        <div class="rater-item">
+                                                                            <span class="rater-name">${rd.name}</span>
+                                                                            <span class="rater-score">${typeof rd.score === 'number' ? rd.score.toFixed(1) : `<span style="font-size:0.8em; color:#999;">${rd.score}</span>`}</span>
+                                                                        </div>
+                                                                    `).join('')
+                                    : `<div style="padding: 4px 10px; color: #94a3b8; font-style: italic;">無資料</div>`
                                 }
-                            });
-
-                            // Summary for special employees
-                            const formulaParts = breakdown.map(item => `${item.label}(${item.weight}%)`).join(' + ');
-                            detailHtml += `
-                                <div class="score-summary">
-                                    <strong>加權規則：</strong>${formulaParts} = ${catAvg} → ${catRounded}
-                                </div>
-                            </div>
-                            `;
-                        } else {
-                            // Regular employee: 50/50 weighted
-                            // Manager group (50%)
-                            detailHtml += `
-                                <div style="margin-bottom: 12px;">
-                                    <div style="background: #dbeafe; padding: 6px 10px; border-radius: 6px; font-weight: 600; color: #1e40af; margin-bottom: 6px;">
-                                        👔 主管評分 (50%) - 平均: ${managerAvgVal}
-                                    </div>
-                                    <div class="rater-list">
-                            `;
-
-                            if (managerRaters.length > 0) {
-                                managerRaters.forEach(r => {
-                                    detailHtml += `
-                                        <div class="rater-item">
-                                            <span class="rater-name">${r.name}</span>
-                                            <span class="rater-score">${r[catKey]}</span>
-                                        </div>
-                                    `;
-                                });
-                            } else {
-                                detailHtml += `<div style="color: var(--text-secondary); font-size: 0.85rem;">無主管評分</div>`;
-                            }
-
-                            detailHtml += `</div></div>`;
-
-                            // Colleague group (50%)
-                            detailHtml += `
-                                <div style="margin-bottom: 12px;">
-                                    <div style="background: #dcfce7; padding: 6px 10px; border-radius: 6px; font-weight: 600; color: #166534; margin-bottom: 6px;">
-                                        👥 同仁評分 (50%) - 平均: ${colleagueAvgVal}
-                                    </div>
-                                    <div class="rater-list">
-                            `;
-
-                            if (colleagueRaters.length > 0) {
-                                colleagueRaters.forEach(r => {
-                                    detailHtml += `
-                                        <div class="rater-item">
-                                            <span class="rater-name">${r.name}</span>
-                                            <span class="rater-score">${r[catKey]}</span>
-                                        </div>
-                                    `;
-                                });
-                            } else {
-                                detailHtml += `<div style="color: var(--text-secondary); font-size: 0.85rem;">無同仁評分</div>`;
-                            }
-
-                            detailHtml += `</div></div>`;
-
-                            // Calculation summary
-                            let calcFormula = '';
-                            if (managerRaters.length > 0 && colleagueRaters.length > 0) {
-                                calcFormula = `(${managerAvgVal} × 50%) + (${colleagueAvgVal} × 50%) = ${catAvg} → ${catRounded}`;
-                            } else if (managerRaters.length > 0) {
-                                calcFormula = `主管平均 ${managerAvgVal} → ${catRounded}`;
-                            } else if (colleagueRaters.length > 0) {
-                                calcFormula = `同仁平均 ${colleagueAvgVal} → ${catRounded}`;
-                            }
-
-                            detailHtml += `
-                                <div class="score-summary">
-                                    <strong>加權計算：</strong>${calcFormula}
-                                </div>
-                            </div>
-                            `;
-                        }
-
-                        return detailHtml;
-                    }
-
-                    html += renderCategoryDetail('cat1', '第一大類評分明細', cat1Avg, emp.cat1_rounded);
-                    html += renderCategoryDetail('cat2', '第二大類評分明細', cat2Avg, emp.cat2_rounded);
-                    html += renderCategoryDetail('cat3', '第三大類評分明細', cat3Avg, emp.cat3_rounded);
-
-                    html += `
+                                                            </div>
+                                                        </div>
+                                                    `;
+                        }).join('')}
+                                                <div class="score-summary" style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e2e8f0; font-size: 0.9rem;">
+                                                    <strong>計算結論：</strong> 加權平均 ${avg} → <strong>${rounded}</strong>
+                                                </div>
+                                            </div>
+                                        `;
+                    }).join('')}
                                 </div>
                             </td>
                         </tr>
@@ -1564,29 +1115,42 @@
                         </table>
                     </section>
                 `;
-            });
+            }
 
             container.innerHTML = html;
         }
 
-        // Toggle detail row
         function toggleDetailRow(rowId) {
-            const detailRow = document.getElementById(rowId);
+            const row = document.querySelector(`tr.detail-row[data-row-id="${rowId}"]`);
             const btn = document.querySelector(`[data-row-id="${rowId}"] .expand-row-btn`);
 
-            if (detailRow.classList.contains('show')) {
-                detailRow.classList.remove('show');
-                btn.classList.remove('expanded');
-                btn.textContent = '▶';
+            if (!row) return;
+
+            if (row.classList.contains('show')) {
+                row.classList.remove('show');
+                if (btn) btn.textContent = '▶';
+                if (btn) btn.classList.remove('expanded');
             } else {
-                detailRow.classList.add('show');
-                btn.classList.add('expanded');
-                btn.textContent = '▼';
+                row.classList.add('show');
+                if (btn) btn.textContent = '▼';
+                if (btn) btn.classList.add('expanded');
             }
         }
 
-        // Initialize
-        document.addEventListener('DOMContentLoaded', loadData);
+        // Initialize and setup sync
+        window.addEventListener('DOMContentLoaded', () => {
+            loadData();
+
+            // Auto-refresh every 30 seconds
+            setInterval(() => loadData(true), 10000);
+
+            // Refresh on tab focus
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') {
+                    loadData(true);
+                }
+            });
+        });
     </script>
 </body>
 
