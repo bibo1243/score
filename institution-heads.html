@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>機構主管評分概覽 - 績效管理系統</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=Outfit:wght@400;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --manager-primary: #b91c1c;
+            --manager-bg: #fff5f5;
+            --manager-accent: #f87171;
+        }
+
+        .manager-header {
+            background: linear-gradient(135deg, #7f1d1d 0%, #b91c1c 100%);
+            color: white;
+            padding: 40px 20px;
+            text-align: center;
+            border-radius: 0 0 30px 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(185, 28, 28, 0.2);
+        }
+
+        .manager-header h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            letter-spacing: -0.5px;
+        }
+
+        .manager-header p {
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+
+        .heads-nav {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 25px;
+        }
+
+        .heads-nav a {
+            background: rgba(255, 255, 255, 0.15);
+            color: white;
+            padding: 8px 20px;
+            border-radius: 50px;
+            text-decoration: none;
+            backdrop-filter: blur(5px);
+            transition: all 0.3s ease;
+            font-weight: 500;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .heads-nav a:hover {
+            background: white;
+            color: var(--manager-primary);
+            transform: translateY(-2px);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .manager-stat-card {
+            background: white;
+            padding: 25px;
+            border-radius: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            text-align: center;
+            border-bottom: 4px solid var(--manager-accent);
+        }
+
+        .manager-stat-card i {
+            font-size: 2rem;
+            color: var(--manager-primary);
+            margin-bottom: 15px;
+        }
+
+        .manager-stat-card .val {
+            display: block;
+            font-size: 2.2rem;
+            font-weight: 700;
+            color: #1a1a2e;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        .manager-stat-card .label {
+            color: #64748b;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .heads-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 25px;
+        }
+
+        .head-card {
+            background: white;
+            border-radius: 24px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+            transition: transform 0.3s ease;
+            position: relative;
+            border: 1px solid #f1f5f9;
+        }
+
+        .head-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .head-card-top {
+            padding: 25px;
+            background: linear-gradient(to bottom right, #ffffff, #fffafa);
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .head-name-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 15px;
+        }
+
+        .head-name-row h2 {
+            font-size: 1.8rem;
+            color: #1a1a2e;
+            margin: 0;
+            font-weight: 700;
+        }
+
+        .org-tag {
+            background: var(--manager-bg);
+            color: var(--manager-primary);
+            padding: 4px 12px;
+            border-radius: 50px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .score-pill {
+            background: #1a1a2e;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 15px;
+            text-align: center;
+        }
+
+        .score-pill .num {
+            display: block;
+            font-size: 1.6rem;
+            font-weight: 700;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        .score-pill .lab {
+            font-size: 0.7rem;
+            opacity: 0.7;
+            text-transform: uppercase;
+        }
+
+        .annual-banner {
+            background: var(--manager-primary);
+            color: white;
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .annual-banner .title {
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+
+        .annual-banner .result {
+            font-size: 1.8rem;
+            font-weight: 800;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        .cat-table {
+            width: 100%;
+            padding: 20px;
+            background: white;
+        }
+
+        .cat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px dashed #e2e8f0;
+        }
+
+        .cat-row:last-child {
+            border-bottom: none;
+        }
+
+        .cat-info .c-label {
+            display: block;
+            font-size: 0.85rem;
+            color: #64748b;
+            font-weight: 500;
+        }
+
+        .cat-info .c-avg {
+            font-size: 0.75rem;
+            color: #94a3b8;
+        }
+
+        .cat-num {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #1a1a2e;
+        }
+
+        .formula-box {
+            background: #f8fafc;
+            margin: 0 20px 20px 20px;
+            padding: 12px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            color: #64748b;
+            font-family: 'Monaco', monospace;
+            border: 1px solid #e2e8f0;
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .pulse {
+            width: 60px;
+            height: 60px;
+            background-color: var(--manager-primary);
+            border-radius: 100%;
+            animation: pulse-ani 1.2s infinite ease-in-out;
+        }
+
+        @keyframes pulse-ani {
+            0% {
+                transform: scale(0);
+                opacity: 0.7;
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 0;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .heads-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+    <script src="auth.js"></script>
+</head>
+
+<body>
+    <div id="loading" class="loading-overlay">
+        <div class="pulse"></div>
+    </div>
+
+    <div class="app-container">
+        <header class="manager-header">
+            <h1>機構主管評分概覽</h1>
+            <p>核心決策層績效數據分析與總覽</p>
+            <div class="heads-nav">
+                <a href="index.html"><i class="fa-solid fa-house"></i> 首頁</a>
+                <a href="institution-scores.html"><i class="fa-solid fa-table"></i> 機構明細</a>
+                <a href="rater-stats.html"><i class="fa-solid fa-chart-pie"></i> 評分統計</a>
+            </div>
+        </header>
+
+        <main class="container">
+            <div class="stats-grid">
+                <div class="manager-stat-card">
+                    <i class="fa-solid fa-user-shield"></i>
+                    <span class="val" id="count">0</span>
+                    <span class="label">評核主管總數</span>
+                </div>
+                <div class="manager-stat-card">
+                    <i class="fa-solid fa-star"></i>
+                    <span class="val" id="avg-total">0</span>
+                    <span class="label">平均年度總分</span>
+                </div>
+                <div class="manager-stat-card">
+                    <i class="fa-solid fa-check-double"></i>
+                    <span class="val" id="high-count">0</span>
+                    <span class="label">優秀評等 (≥90)</span>
+                </div>
+                <div class="manager-stat-card">
+                    <i class="fa-solid fa-users-viewfinder"></i>
+                    <span class="val" id="total-raters">0</span>
+                    <span class="label">總參與評分人數</span>
+                </div>
+            </div>
+
+            <div id="heads-grid" class="heads-grid">
+                <!-- Data will be loaded here -->
+            </div>
+        </main>
+
+        <footer style="text-align: center; padding: 40px; color: #94a3b8; font-size: 0.9rem;">
+            &copy; 2026 績效管理系統 - 核心主管決策專頁
+        </footer>
+    </div>
+
+    <script src="data-processor.js"></script>
+    <script>
+        const TARGET_HEADS = ['李冠葦', '廖振杉', '廖慧雯', '楊顗帆'];
+
+        async function loadData() {
+            try {
+                const response = await fetch('/api/data');
+                const data = await response.json();
+
+                // Filter and sort per target order
+                const heads = data.filter(e => TARGET_HEADS.includes(e.name))
+                    .sort((a, b) => TARGET_HEADS.indexOf(a.name) - TARGET_HEADS.indexOf(b.name));
+
+                renderPage(heads);
+                document.getElementById('loading').style.display = 'none';
+            } catch (err) {
+                console.error("Load failed:", err);
+                // Fallback to local processing if API fails (e.g. on GitHub Pages)
+                try {
+                    const localData = await loadProcessedData();
+                    const heads = localData.filter(e => TARGET_HEADS.includes(e.name))
+                        .sort((a, b) => TARGET_HEADS.indexOf(a.name) - TARGET_HEADS.indexOf(b.name));
+                    renderPage(heads);
+                    document.getElementById('loading').style.display = 'none';
+                } catch (e2) {
+                    alert("資料載入失敗，請確認伺服器狀態");
+                }
+            }
+        }
+
+        function renderPage(heads) {
+            const grid = document.getElementById('heads-grid');
+
+            // Update stats
+            document.getElementById('count').textContent = heads.length;
+
+            let totalAnnual = 0;
+            let totalRaters = 0;
+            let excellent = 0;
+
+            const html = heads.map(emp => {
+                const h1 = emp.h1_score || 0;
+                const h2 = emp.final_score || 0;
+                const annualFull = h1 * 0.4 + h2 * 0.6;
+                const annualRound = Math.ceil(parseFloat(annualFull.toFixed(4)));
+
+                totalAnnual += annualRound;
+                totalRaters += emp.rater_count || 0;
+                if (annualRound >= 90) excellent++;
+
+                return `
+                    <div class="head-card">
+                        <div class="head-card-top">
+                            <div class="head-name-row">
+                                <div>
+                                    <span class="org-tag">${emp.org || '機構'}</span>
+                                    <h2>${emp.name}</h2>
+                                </div>
+                                <div class="score-pill">
+                                    <span class="num">${h2}</span>
+                                    <span class="lab">下半年總分</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="annual-banner">
+                            <span class="title">年度總得分 (40%:60%)</span>
+                            <span class="result">${annualRound}</span>
+                        </div>
+
+                        <div class="cat-table">
+                            <div class="cat-row">
+                                <div class="cat-info">
+                                    <span class="c-label">第一大類 核心職能 (40%)</span>
+                                    <span class="c-avg">平均評分: ${emp.cat1_avg?.toFixed(2) || '0.00'}</span>
+                                </div>
+                                <span class="cat-num">${emp.cat1_rounded}</span>
+                            </div>
+                            <div class="cat-row">
+                                <div class="cat-info">
+                                    <span class="c-label">第二大類 專業效能 (30%)</span>
+                                    <span class="c-avg">平均評分: ${emp.cat2_avg?.toFixed(2) || '0.00'}</span>
+                                </div>
+                                <span class="cat-num">${emp.cat2_rounded}</span>
+                            </div>
+                            <div class="cat-row">
+                                <div class="cat-info">
+                                    <span class="c-label">第三大類 領導管理 (30%)</span>
+                                    <span class="c-avg">平均評分: ${emp.cat3_avg?.toFixed(2) || '0.00'}</span>
+                                </div>
+                                <span class="cat-num">${emp.cat3_rounded}</span>
+                            </div>
+                        </div>
+
+                        <div class="formula-box">
+                            <i class="fa-solid fa-calculator"></i>
+                            2026全年度 = H1(${h1})*0.4 + H2(${h2})*0.6 = ${annualFull.toFixed(2)} → ${annualRound}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            grid.innerHTML = html;
+
+            document.getElementById('avg-total').textContent = heads.length > 0 ? (totalAnnual / heads.length).toFixed(1) : 0;
+            document.getElementById('high-count').textContent = excellent;
+            document.getElementById('total-raters').textContent = totalRaters;
+        }
+
+        window.onload = loadData;
+    </script>
+</body>
+
+</html>
